@@ -2,7 +2,23 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 2 (não iniciada)
+## Etapa atual: 2 (em andamento)
+
+### Feito (2026-10-27)
+
+- Pesquisa da tarefa 1 em `docs/cloudflare-email-routing.md`, incluindo Queues e os pontos não documentados.
+- Plano do PR 1 aprovado com duas mudanças: fila (Cloudflare Queues) entre o recebimento e o parse, e confiança só no `Authentication-Results` do topo com `authserv-id` confiável.
+- PR 1 (branch `etapa-2/recebimento`): scaffold do `apps/mail-core`, migração `0001`, seed, handler `email`, consumidor da fila, 32 testes, documentação e `security-audit`.
+
+### Falta
+
+- Revisão e merge do PR 1.
+- PR 2 (`etapa-2/deploy`): permissões do token, D1, R2, filas, secret `FALLBACK_FORWARD_TO`, destino verificado no Email Routing, deploy, catch-all, teste ponta a ponta, `inbox:list` e os testes reais de `docs/cloudflare-email-routing.md` (exceção no handler, cabeçalhos de autenticação, memória, `forward()` depois de ler o `raw`, `authserv-id` forjado).
+
+### Próximo passo
+
+Depois do merge do PR 1: na `main`, `git pull --ff-only`, criar o branch `etapa-2/deploy` e apresentar as permissões do token (tarefa 2).
+
 
 ## Etapa 1: concluída (2026-10-27)
 
@@ -39,4 +55,5 @@ Etapa 2. O `docs/etapas/etapa-2.md` já está na pasta, mas ainda não foi commi
 
 Ideias que ainda não entraram no roteiro.
 
-- _(vazio)_
+- Ferramenta de reprocessamento: reenviar para a fila os `.eml` do R2 que não têm linha no D1 (DLQ expirada após 4 dias), usando o `customMetadata` do objeto.
+- Alerta quando chegar mensagem na DLQ `mail-ingest-dlq`.

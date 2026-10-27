@@ -20,7 +20,7 @@ Atualize a cada segredo criado ou rotacionado. **Sem valores.**
 
 | Nome | Local | Quem usa | Permissões | Última rotação |
 | ---- | ----- | -------- | ---------- | -------------- |
-|      |       |          |            |                |
+| `FALLBACK_FORWARD_TO` | `wrangler secret` do Worker `mail-core` | `mail-core` (encaminhamento de reserva) | Não é credencial: é um endereço pessoal, guardado como secret para não ficar público | A criar no PR 2 |
 
 Tokens SMTP: rotação a cada 6 meses, ou na hora em caso de suspeita.
 
