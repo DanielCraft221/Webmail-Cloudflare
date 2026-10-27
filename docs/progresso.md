@@ -2,7 +2,9 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 1 (concluída, aguardando validação do Daniel)
+## Etapa atual: 2 (não iniciada)
+
+## Etapa 1: concluída e validada (2026-10-27)
 
 ### Feito (2026-10-27)
 
@@ -14,16 +16,16 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 - CI (gitleaks no histórico completo + lint/typecheck/test) e Dependabot.
 - Documentação base, `SECURITY.md`, `LICENSE` (AGPL-3.0).
 - Primeiro push feito. CI verde nos jobs `secrets` e `quality`.
+- GitHub configurado: Secret scanning, Push protection, Private vulnerability reporting, Dependabot, ruleset da `main` (checks `quality` e `secrets` obrigatórios, sem force push, sem exclusão) e `GITHUB_TOKEN` só leitura.
+- Fluxo de trabalho: mudanças só por branch + PR (PR #1).
 
 ### Falta
 
 - Ver o log da execução do Dependabot (npm) que falhou: https://github.com/DanielCraft221/Webmail-Cloudflare/actions/runs/40517091368. Suspeita: `trustPolicy` barrando `lefthook@2.2.2`.
-- Configurações manuais no GitHub: feitas (segurança do repositório, ruleset da `main`, permissões do `GITHUB_TOKEN`). A partir de agora, mudanças só por branch + PR.
-- Validação dos critérios de pronto pelo Daniel.
 
 ### Próximo passo
 
-Validar a Etapa 1. Depois: ler `docs/etapas/etapa-2.md` e apresentar o plano da Etapa 2.
+Daniel coloca `docs/etapas/etapa-2.md` no repositório. Depois: ler o arquivo e apresentar o plano da Etapa 2.
 
 ### Observações
 
