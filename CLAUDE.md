@@ -123,7 +123,16 @@ Regras:
 ## Skills
 
 - No início de cada tarefa, veja as skills disponíveis e **use as que se aplicam**. Diga em uma linha qual skill vai usar e por quê.
-- Skills instaladas: _(preencher com a lista confirmada por mim)_
+- Skills instaladas (todas confirmadas por mim para uso):
+  - **superpowers**: `test-driven-development`, `verification-before-completion`, `systematic-debugging`, `writing-plans`, `brainstorming`.
+  - **caveman** (`caveman-commit`): respostas curtas e mensagens de commit.
+  - **ponytail** (`ponytail-review`): código mínimo e revisão antes do PR.
+  - **claude-security** / `security-audit`: auditoria de segurança, principalmente nas Etapas 3, 5 e 10.
+  - **code-review**, **commit-commands**: revisão de diff e commits.
+  - **feature-dev**: funcionalidades maiores (Worker, webmail).
+  - **frontend-design**, `webapp-testing`: interface do webmail e testes com Playwright (Etapas 5 e 6).
+  - **claude-mem-cowork**: memória entre sessões.
+  - **context-engineering**, **file-search**: busca no código e economia de contexto.
 - **Este CLAUDE.md vence qualquer skill.** Se uma skill mandar fazer algo que contraria as regras daqui (push direto, `--force`, commit sem testes, permissões automáticas, colocar segredo em arquivo), siga o CLAUDE.md e me avise do conflito.
 - Scripts que vêm dentro de uma skill seguem a regra 3: com `sudo`, `docker` ou mexendo na Cloudflare, mostre o comando e espere meu "ok".
 
