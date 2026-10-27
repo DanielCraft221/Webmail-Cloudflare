@@ -4,7 +4,7 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 
 ## Etapa atual: 2 (não iniciada)
 
-## Etapa 1: concluída e validada (2026-10-27)
+## Etapa 1: concluída (2026-10-27)
 
 ### Feito (2026-10-27)
 
@@ -17,7 +17,9 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 - Documentação base, `SECURITY.md`, `LICENSE` (AGPL-3.0).
 - Primeiro push feito. CI verde nos jobs `secrets` e `quality`.
 - GitHub configurado: Secret scanning, Push protection, Private vulnerability reporting, Dependabot, ruleset da `main` (checks `quality` e `secrets` obrigatórios, sem force push, sem exclusão) e `GITHUB_TOKEN` só leitura.
-- Fluxo de trabalho: mudanças só por branch + PR (PR #1).
+- Fluxo de trabalho: mudanças só por branch + PR (PRs #1 a #4).
+- Dependabot npm corrigido (PR #3): `lefthook@2.2.2` no `ignore`. As execuções seguintes terminaram com sucesso.
+- Verificação final: clone novo pelo GitHub + `pnpm install` instala o hook; lint, typecheck e 15 testes passam; `git status` limpo; gitleaks no histórico completo sem vazamentos.
 
 ### Falta
 
@@ -25,7 +27,7 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 
 ### Próximo passo
 
-Daniel coloca `docs/etapas/etapa-2.md` no repositório. Depois: ler o arquivo e apresentar o plano da Etapa 2.
+Etapa 2. O `docs/etapas/etapa-2.md` já está na pasta, mas ainda não foi commitado. Na próxima sessão: commitar o arquivo numa branch, ler e apresentar o plano da Etapa 2.
 
 ### Observações
 
