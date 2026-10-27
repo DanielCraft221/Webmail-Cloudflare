@@ -1,0 +1,10 @@
+Authentication-Results: mx.trusted.test; spf=fail smtp.mailfrom=example.com; dkim=none; dmarc=fail (p=reject) header.from=example.com
+From: Banco Falso <alerta@example.com>
+To: contato@survivus.com.br
+Subject: Confirme seus dados
+Date: Mon, 26 Oct 2026 13:00:00 -0300
+Message-ID: <dmarc-fail-0001@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Mensagem que falha no DMARC.

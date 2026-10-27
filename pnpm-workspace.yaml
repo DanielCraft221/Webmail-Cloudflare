@@ -9,7 +9,11 @@ minimumReleaseAge: 10080
 trustPolicy: no-downgrade
 # Dependency install scripts stay blocked (strictDepBuilds is on by default).
 # Hooks are installed by the root "prepare" script, not by lefthook's postinstall.
+# esbuild and workerd ship their native binary in an optional platform package;
+# their install scripts only verify or copy it, so they stay blocked too.
 allowBuilds:
   lefthook: false
+  esbuild: false
+  workerd: false
 # Refuse to install if the Node version does not match "engines".
 engineStrict: true

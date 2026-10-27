@@ -1,0 +1,21 @@
+{
+  "name": "@webmail/mail-core",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "types": "wrangler types",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "4.13.13",
+    "postal-mime": "4.0.11"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.5",
+    "vitest": "5.0.5",
+    "wrangler": "4.151.2"
+  }
+}
