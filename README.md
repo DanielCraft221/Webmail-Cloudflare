@@ -51,7 +51,7 @@ O hook de pre-commit exige o [gitleaks](https://github.com/gitleaks/gitleaks) in
 | Etapa | Conteúdo                                                        | Status       |
 | ----- | --------------------------------------------------------------- | ------------ |
 | 0     | Preparação manual do servidor                                   | Concluída    |
-| 1     | Repositório, monorepo, lint, testes, CI, gitleaks, documentação | Em validação |
+| 1     | Repositório, monorepo, lint, testes, CI, gitleaks, documentação | Concluída    |
 | 2     | Worker: recebimento de e-mails → R2 + D1                        | Pendente     |
 | 3     | Worker: API interna de leitura com verificação de permissão     | Pendente     |
 | 4     | Envio para serviços (nLogin, NodeBB) via `mail.survivusmc.com`  | Pendente     |
