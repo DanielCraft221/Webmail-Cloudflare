@@ -62,4 +62,4 @@ Os outros sites do servidor (rede `sites`) seguem estas regras:
   location ~ /\. { deny all; }
   ```
 
-- Manter `.env` e qualquer arquivo de configuração **fora** da pasta pública (`root`). O bloqueio acima é a segunda linha de defesa, não a primeira.
+- Manter `.env` e qualquer arquivo de configuração **fora** da pasta pública (`root`). O bloqueio acima só serve de reserva, caso um desses arquivos vá parar na pasta pública por engano.
