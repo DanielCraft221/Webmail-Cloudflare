@@ -2,7 +2,7 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 1 (em validação)
+## Etapa atual: 1 (concluída, aguardando validação do Daniel)
 
 ### Feito (2026-10-27)
 
@@ -13,11 +13,12 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 - `packages/shared` com `mailboxAddress` (zod) e 15 testes.
 - CI (gitleaks no histórico completo + lint/typecheck/test) e Dependabot.
 - Documentação base, `SECURITY.md`, `LICENSE` (AGPL-3.0).
+- Primeiro push feito. CI verde nos jobs `secrets` e `quality`.
 
 ### Falta
 
-- Primeiro push e CI verde.
-- Configurações manuais no GitHub (Secret scanning, Push protection, proteção da `main`, permissões do `GITHUB_TOKEN`).
+- Ver o log da execução do Dependabot (npm) que falhou: https://github.com/DanielCraft221/Webmail-Cloudflare/actions/runs/40517091368. Suspeita: `trustPolicy` barrando `lefthook@2.2.2`.
+- Configurações manuais no GitHub: feitas (segurança do repositório, ruleset da `main`, permissões do `GITHUB_TOKEN`). A partir de agora, mudanças só por branch + PR.
 - Validação dos critérios de pronto pelo Daniel.
 
 ### Próximo passo
@@ -27,6 +28,7 @@ Validar a Etapa 1. Depois: ler `docs/etapas/etapa-2.md` e apresentar o plano da 
 ### Observações
 
 - `lefthook@2.2.2` foi barrado pelo `trustPolicy` (publicado sem provenance, diferente das versões anteriores). Fixado em 2.2.1. Rever quando sair uma versão nova com provenance.
+- pnpm 12 grava o `pnpm-lock.yaml` em dois documentos YAML. Com isso o dependency graph do GitHub não enxerga as dependências: **Dependabot alerts e security updates não funcionam**, só as atualizações semanais de versão. Compensar revisando os PRs semanais do Dependabot.
 - No pnpm 12, o `.npmrc` serve só para credenciais: não existe no repositório e está no `.gitignore`.
 
 ## Depois

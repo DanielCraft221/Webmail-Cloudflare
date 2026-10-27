@@ -100,3 +100,9 @@ Registro curto das decisões já tomadas e seus motivos. Mudanças de arquitetur
 **Decisão:** o acesso remoto ao servidor é pelo Tailscale, com SSH só por chave (sem senha). O DNS do servidor fica fora do controle do Tailscale.
 
 **Motivo:** o Tailscale dispensa expor a porta 22 na internet e abrir portas no roteador. A chave SSH elimina ataques de força bruta de senha. Deixar o DNS do sistema fora do Tailscale evita que uma falha ou mudança no Tailscale quebre a resolução de nomes dos serviços do servidor (Tunnel, Docker, Minecraft).
+
+## Mudanças na `main` só por Pull Request com CI verde
+
+**Decisão:** a `main` tem um ruleset que exige os checks `quality` e `secrets` verdes, bloqueia force push e impede a exclusão da branch. Todo trabalho é feito numa branch e entra por Pull Request.
+
+**Motivo:** um check obrigatório só pode ser cumprido por um commit que já rodou o CI, ou seja, num PR. O push direto na `main` fica bloqueado. Assim nenhum commit com segredo, lint quebrado ou teste falhando chega à `main`. Não há bypass para o dono: um bypass liberaria também o force push.
