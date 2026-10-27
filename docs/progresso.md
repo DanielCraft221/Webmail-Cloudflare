@@ -7,8 +7,9 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 ### Feito (2026-10-27)
 
 - Pesquisa da tarefa 1 em `docs/cloudflare-email-routing.md`, incluindo Queues e os pontos não documentados.
+- Revisão do PR 1: deduplicação por `Message-ID` + cabeçalhos, duplicatas guardadas em `dup/`.
 - Plano do PR 1 aprovado com duas mudanças: fila (Cloudflare Queues) entre o recebimento e o parse, e confiança só no `Authentication-Results` do topo com `authserv-id` confiável.
-- PR 1 (branch `etapa-2/recebimento`): scaffold do `apps/mail-core`, migração `0001`, seed, handler `email`, consumidor da fila, 32 testes, documentação e `security-audit`.
+- PR 1 (branch `etapa-2/recebimento`): scaffold do `apps/mail-core`, migração `0001`, seed, handler `email`, consumidor da fila, 34 testes, documentação e `security-audit`.
 
 ### Falta
 
@@ -57,3 +58,4 @@ Ideias que ainda não entraram no roteiro.
 
 - Ferramenta de reprocessamento: reenviar para a fila os `.eml` do R2 que não têm linha no D1 (DLQ expirada após 4 dias), usando o `customMetadata` do objeto.
 - Alerta quando chegar mensagem na DLQ `mail-ingest-dlq`.
+- Limpeza das duplicatas em `dup/` no R2 (hoje ficam para sempre). O reprocessamento acima deve ignorar `dup/`.
