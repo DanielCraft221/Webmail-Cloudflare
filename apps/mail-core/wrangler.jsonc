@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mail-core",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-19",
+  // No public HTTP surface in Etapa 2: no workers.dev URL, no preview URLs, no routes.
+  "workers_dev": false,
+  "preview_urls": false,
+  // account_id is intentionally absent: Wrangler reads CLOUDFLARE_ACCOUNT_ID (docs/decisoes.md).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "webmail-db",
+      // PLACEHOLDER: replaced with the real id in PR 2 (etapa-2/deploy).
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      // Private bucket: no public access, no r2.dev domain.
+      "binding": "MAIL",
+      "bucket_name": "webmail-mail"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "INGEST_QUEUE",
+        "queue": "mail-ingest"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "mail-ingest",
+        // One message per invocation keeps a 25 MiB parse inside the 128 MB memory limit.
+        "max_batch_size": 1,
+        // With the backoff in src/ingest.ts (30 s doubling, capped at 1 h) this covers about 4 h.
+        "max_retries": 10,
+        "dead_letter_queue": "mail-ingest-dlq"
+      }
+    ]
+  }
+}

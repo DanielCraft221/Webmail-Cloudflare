@@ -38,6 +38,10 @@ A relação usuário ↔ caixa é configurável no banco, **nunca fixa no códig
 
 ```
 Internet ──MX──> Cloudflare Email Routing ──> Worker "mail-core" (apps/mail-core)
+                                                ├─ email(): valida, deduplica, grava .eml no R2, envia a chave para a fila
+                                                │     └─ falha no R2, na fila ou no D1: forward() para endereço de reserva (nunca setReject)
+                                                ├─ Queue "mail-ingest" ──> queue(): parse, anexos no R2, metadados no D1
+                                                │     └─ retries com espera crescente; esgotados: DLQ "mail-ingest-dlq"
                                                 ├─ R2: .eml bruto, corpo parseado, anexos
                                                 ├─ D1: metadados, caixas, usuários, permissões (fonte da verdade)
                                                 ├─ Envio: binding do Cloudflare Email Service
@@ -61,7 +65,7 @@ Invariantes:
 ## Stack
 
 - TypeScript `strict` em tudo. Monorepo **pnpm workspaces**:
-  - `apps/mail-core`: Cloudflare Worker (Hono, `postal-mime`), testes com `@cloudflare/vitest-pool-workers`
+  - `apps/mail-core`: Cloudflare Worker (Hono, `postal-mime`), Cloudflare Queues, testes com `@cloudflare/vitest-plugin`
   - `apps/webmail`: SvelteKit + `adapter-node`, SQLite (`better-sqlite3`), roda em container
   - `packages/shared`: tipos e schemas `zod` compartilhados
 - Testes: Vitest. Lint/format: Biome.
@@ -170,3 +174,4 @@ Ideias novas não entram no roteiro direto: vão para a seção "Depois" do `doc
 - `pnpm lint` / `pnpm format`: Biome
 - `pnpm typecheck`: TypeScript em todos os pacotes
 - `pnpm test`: Vitest em todos os pacotes
+- `pnpm --filter @webmail/mail-core types`: regenera `apps/mail-core/worker-configuration.d.ts` depois de mudar o `wrangler.jsonc`

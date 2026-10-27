@@ -8,6 +8,7 @@ Visão geral no [`README.md`](../README.md). Este documento descreve os fluxos e
 | ---------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------- |
 | Cloudflare Email Routing     | Cloudflare                      | Recebe e-mail pelo MX dos domínios e entrega ao Worker                                    |
 | Worker `mail-core`           | Cloudflare                      | Processa e guarda e-mails, expõe a API interna, envia respostas                           |
+| Queues                       | Cloudflare                      | Fila `mail-ingest` entre o recebimento e o parse, com retries e DLQ `mail-ingest-dlq`     |
 | R2                           | Cloudflare                      | `.eml` bruto, corpo parseado, anexos                                                      |
 | D1                           | Cloudflare                      | Metadados, caixas, usuários, permissões. **Fonte da verdade**                             |
 | Cloudflare Email Sending     | Cloudflare                      | Envio: binding do Worker (webmail) e SMTP (nLogin, NodeBB)                                |
@@ -18,9 +19,40 @@ Visão geral no [`README.md`](../README.md). Este documento descreve os fluxos e
 ## Fluxo de recebimento
 
 1. Um remetente externo envia para `contato@survivus.com.br`.
-2. O MX do domínio aponta para a Cloudflare. O Email Routing recebe a mensagem.
-3. O Email Routing entrega a mensagem ao Worker `mail-core`.
-4. O Worker guarda o `.eml` bruto no R2, faz o parse (`postal-mime`), guarda corpo e anexos no R2 e os metadados no D1.
+2. O MX do domínio aponta para a Cloudflare. O Email Routing recebe a mensagem e, pela regra catch-all, entrega ao Worker `mail-core`.
+3. **Handler `email`** (`apps/mail-core/src/email.ts`), curto e sem parse:
+   1. Procura a caixa **ativa** do destinatário (em minúsculas) no D1. Não existe: `setReject("Unknown recipient")`.
+   2. `rawSize` acima de 25 MiB: `setReject`.
+   3. Lê o `raw` uma vez e calcula a chave de deduplicação: o `Message-ID` ou, sem ele, `sha256:<hex>` do `.eml`. Já existe na caixa: descarta.
+   4. Grava o `.eml` em `raw/AAAA/MM/<uuid>.eml` no R2, com `customMetadata`: `mailboxId`, `envelopeTo`, `envelopeFrom`, `receivedAt` e `dedupeKey`. Com isso o R2 sozinho basta para reprocessar, mesmo com cópia oculta (o destinatário não aparece nos cabeçalhos).
+   5. Envia para a fila `mail-ingest` só a chave e esses dados. Assunto e corpo não entram na fila.
+4. **Consumidor da fila** (`apps/mail-core/src/ingest.ts`), uma mensagem por vez:
+   1. Lê o `.eml` do R2 e faz o parse com `postal-mime`.
+   2. Grava o corpo em `body/<uuid>.json` e cada anexo em `att/<uuid>/<uuid-do-anexo>`. O id do anexo é derivado do id da mensagem e da posição, então um retry reaproveita as mesmas chaves.
+   3. Lê o `Authentication-Results` (veja abaixo). DMARC `fail` vai para a pasta `spam`.
+   4. Grava a mensagem e os anexos no D1 num `batch` (tudo ou nada).
+
+### O que acontece em cada falha
+
+| Falha | Comportamento |
+| ----- | ------------- |
+| Destinatário inexistente ou mensagem grande demais | `setReject`: o remetente recebe o erro na hora |
+| D1, R2 ou fila falham no handler | `forward()` para o endereço de reserva (`FALLBACK_FORWARD_TO`). **Nunca `setReject`** |
+| O `forward()` também falha, ou não há endereço de reserva | O handler relança a exceção. O efeito real para o remetente é medido no PR 2 |
+| A fila falha depois de gravar no R2 | A mensagem é encaminhada, e o `.eml` fica no R2 com os metadados |
+| Parse falha (MIME quebrado) | A mensagem é registrada com `parse_status = 'failed'`, o assunto lido direto dos cabeçalhos e o `.eml` guardado |
+| D1 ou R2 falham no consumidor | `retry` com espera de 30 s, dobrando até 1 h, por até 10 tentativas (cerca de 4 h). Depois vai para a DLQ `mail-ingest-dlq` |
+| Mensagem na DLQ | Fica lá por 4 dias (sem consumidor). O `.eml` continua no R2 para sempre. Reprocessamento: em "Depois" no `progresso.md` |
+| Duas entregas da mesma mensagem ao mesmo tempo | O índice único barra a segunda. O consumidor apaga os objetos dela no R2 e confirma a mensagem da fila |
+| Retry de uma mensagem que já tinha sido gravada | O consumidor reconhece o próprio id e só confirma |
+
+### Autenticação (SPF, DKIM, DMARC)
+
+O remetente pode colocar um `Authentication-Results` falso na mensagem. Por isso só vale o cabeçalho **do topo**, e só se o `authserv-id` dele estiver na lista `TRUSTED_AUTHSERV_IDS` (`apps/mail-core/src/auth-results.ts`). A lista está vazia até o PR 2 confirmar o valor real da Cloudflare: até lá, tudo fica `unknown` e nada vai para `spam` por DMARC.
+
+### Logs
+
+Só o UUID da mensagem, a caixa, o domínio do remetente, o tamanho, o status e o nome do erro. Nunca assunto, corpo, nome de anexo, endereço completo do remetente nem o endereço de reserva.
 
 ### Por que o servidor doméstico não fica no caminho de recebimento
 

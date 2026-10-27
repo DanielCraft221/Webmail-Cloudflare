@@ -1,0 +1,10 @@
+Authentication-Results: evil.example; spf=pass smtp.mailfrom=example.com; dkim=pass header.d=example.com; dmarc=pass header.from=example.com
+From: Atacante <atacante@example.com>
+To: contato@survivus.com.br
+Subject: Cabecalho forjado
+Date: Mon, 26 Oct 2026 14:00:00 -0300
+Message-ID: <forged-0001@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+O remetente colocou o proprio Authentication-Results.

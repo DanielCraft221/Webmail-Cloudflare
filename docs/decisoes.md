@@ -106,3 +106,40 @@ Registro curto das decisões já tomadas e seus motivos. Mudanças de arquitetur
 **Decisão:** a `main` tem um ruleset que exige os checks `quality` e `secrets` verdes, bloqueia force push e impede a exclusão da branch. Todo trabalho é feito numa branch e entra por Pull Request.
 
 **Motivo:** um check obrigatório só pode ser cumprido por um commit que já rodou o CI, ou seja, num PR. O push direto na `main` fica bloqueado. Assim nenhum commit com segredo, lint quebrado ou teste falhando chega à `main`. Não há bypass para o dono: um bypass liberaria também o force push.
+
+## Regra catch-all do Email Routing para o Worker
+
+**Decisão:** o Email Routing de cada domínio tem uma regra catch-all que entrega tudo ao Worker `mail-core`. Quem decide se o endereço existe é a tabela `mailboxes` do D1. Endereço inexistente é recusado com `setReject` durante a conversa SMTP.
+
+**Motivo:** criar ou desativar uma caixa vira uma mudança no banco, sem mexer no painel. O remetente recebe o erro na hora, e nós não geramos e-mail de retorno (que poderia ser usado para backscatter).
+
+## Identificadores no repositório, `account_id` fora
+
+**Decisão:** o `database_id` do D1, o nome do bucket R2 e os nomes das filas ficam no `wrangler.jsonc` commitado. O `account_id` **não** fica: o Wrangler lê da variável `CLOUDFLARE_ACCOUNT_ID`.
+
+**Motivo:** sem um token, esses identificadores não dão acesso a nada, e o Wrangler precisa deles no arquivo. O `account_id` não é necessário no arquivo e identifica a conta inteira, então fica fora por precaução.
+
+## Fila entre o recebimento e o processamento
+
+**Decisão:** o handler `email` só valida, deduplica, grava o `.eml` no R2 e manda a chave para a fila `mail-ingest` (Cloudflare Queues). Um consumidor da fila faz o parse, grava os anexos e o D1, com retries e a dead letter queue `mail-ingest-dlq`. Se o R2, a fila ou o D1 falharem no handler, ele encaminha a mensagem com `forward()` para um endereço de reserva verificado (`FALLBACK_FORWARD_TO`, guardado como secret), e nunca usa `setReject`.
+
+**Motivo:** a Cloudflare não documenta o que o remetente recebe quando o handler lança uma exceção, e a API não tem "falha temporária" (veja `cloudflare-email-routing.md`). Com a fila, o handler faz o mínimo: o trabalho que pode falhar por mais tempo (D1, parse) ganha retries automáticos sem depender do remetente tentar de novo.
+
+**Limitações aceitas:**
+
+- Uma mensagem que esgota os retries fica na DLQ por só 4 dias. O `.eml` continua no R2, com os metadados do envelope no `customMetadata`, mas para reaparecer no webmail precisa de uma ferramenta de reprocessamento (em "Depois" no `progresso.md`).
+- O endereço de reserva fica como secret, e não em `vars`, porque é um e-mail pessoal e o repositório é público. O código recusa um endereço no próprio domínio do destinatário, para não criar um loop.
+
+## Só o `Authentication-Results` do topo, e só de `authserv-id` confiável
+
+**Decisão:** o resultado de SPF, DKIM e DMARC vem só do primeiro `Authentication-Results` da mensagem, e só se o `authserv-id` dele estiver em `TRUSTED_AUTHSERV_IDS`. A lista começa vazia: até o PR 2 confirmar o valor real, tudo fica `unknown`.
+
+**Motivo:** qualquer remetente pode incluir um `Authentication-Results: ...; dmarc=pass` falso. Um cabeçalho de outro servidor não prova nada.
+
+**Pendente (PR 2):** confirmar que a Cloudflare remove ou renomeia um `Authentication-Results` que chega com o `authserv-id` dela (RFC 8601, seção 5). Se não remover, um atacante consegue forjar o id quando a Cloudflare não acrescenta o próprio cabeçalho.
+
+## Scripts de instalação do `esbuild` e do `workerd` bloqueados
+
+**Decisão:** `esbuild` e `workerd` (dependências do Wrangler) ficam com `false` no `allowBuilds`.
+
+**Motivo:** os dois trazem o binário nativo num pacote opcional por plataforma. O script de instalação só confere ou copia esse binário, e os testes e o `wrangler types` funcionam sem ele. Menos código de terceiros rodando no `pnpm install`.

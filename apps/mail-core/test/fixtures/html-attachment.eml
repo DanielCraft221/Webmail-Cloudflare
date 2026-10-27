@@ -1,0 +1,20 @@
+From: Bruno Exemplo <bruno@example.org>
+To: suporte@survivus.com.br
+Cc: Carla <carla@example.org>
+Subject: Relatorio com anexo
+Date: Mon, 26 Oct 2026 11:00:00 -0300
+Message-ID: <html-0001@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed-boundary"
+
+--mixed-boundary
+Content-Type: text/html; charset=utf-8
+
+<p>Segue o <b>relatorio</b> em anexo.</p>
+--mixed-boundary
+Content-Type: application/pdf; name="relatorio-interno-9931.pdf"
+Content-Disposition: attachment; filename="relatorio-interno-9931.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJSBmYWtlIHBkZiBmb3IgdGVzdHMK
+--mixed-boundary--

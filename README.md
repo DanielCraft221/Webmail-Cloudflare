@@ -10,6 +10,10 @@ Sem IMAP, sem POP3, sem servidor SMTP próprio.
 
 ```
 Internet ──MX──> Cloudflare Email Routing ──> Worker "mail-core" (apps/mail-core)
+                                                ├─ email(): valida, deduplica, grava .eml no R2, envia a chave para a fila
+                                                │     └─ falha no R2, na fila ou no D1: forward() para endereço de reserva (nunca setReject)
+                                                ├─ Queue "mail-ingest" ──> queue(): parse, anexos no R2, metadados no D1
+                                                │     └─ retries com espera crescente; esgotados: DLQ "mail-ingest-dlq"
                                                 ├─ R2: .eml bruto, corpo parseado, anexos
                                                 ├─ D1: metadados, caixas, usuários, permissões (fonte da verdade)
                                                 ├─ Envio: binding do Cloudflare Email Service
@@ -52,7 +56,7 @@ O hook de pre-commit exige o [gitleaks](https://github.com/gitleaks/gitleaks) in
 | ----- | --------------------------------------------------------------- | ------------ |
 | 0     | Preparação manual do servidor                                   | Concluída    |
 | 1     | Repositório, monorepo, lint, testes, CI, gitleaks, documentação | Concluída    |
-| 2     | Worker: recebimento de e-mails → R2 + D1                        | Pendente     |
+| 2     | Worker: recebimento de e-mails → R2 + D1                        | Em andamento |
 | 3     | Worker: API interna de leitura com verificação de permissão     | Pendente     |
 | 4     | Envio para serviços (nLogin, NodeBB) via `mail.survivusmc.com`  | Pendente     |
 | 5     | Webmail: login, 2FA, sessões, rate limit, IP ban, CLI de admin  | Pendente     |
