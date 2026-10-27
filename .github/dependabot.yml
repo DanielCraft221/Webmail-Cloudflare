@@ -15,6 +15,10 @@ updates:
     # Matches pnpm minimumReleaseAge (7 days).
     cooldown:
       default-days: 7
+    ignore:
+      # Published without provenance; pnpm trustPolicy rejects it (docs/progresso.md).
+      - dependency-name: lefthook
+        versions: ["2.2.2"]
     groups:
       dev-dependencies:
         dependency-type: development
