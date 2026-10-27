@@ -21,6 +21,8 @@ export type IngestOutcome = "stored" | "already_stored" | "duplicate";
 // Tighter than postal-mime's defaults: real mail never nests this deep, and it bounds CPU and memory.
 const PARSE_LIMITS = { maxNestingDepth: 50, maxPartCount: 1000 };
 const SNIPPET_LENGTH = 200;
+/** RFC 5322 line length limit, also used to cap stored header values. */
+const MAX_HEADER_LENGTH = 998;
 const MAX_RETRY_DELAY_SECONDS = 3600;
 
 export async function handleQueue(
@@ -95,14 +97,18 @@ export async function ingest(
 
   statements.push(
     env.DB.prepare(
-      `INSERT INTO messages (id, mailbox_id, folder, message_id, in_reply_to, references_ids,
+      `INSERT INTO messages (id, mailbox_id, folder, message_id, dedupe_key, in_reply_to, references_ids,
          from_address, from_name, to_json, cc_json, subject, snippet, header_date, received_at,
          size, has_attachments, spf, dkim, dmarc, raw_key, body_key, parse_status)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)`,
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)`,
     ).bind(
       job.id,
       job.mailboxId,
       auth.dmarc === "fail" ? "spam" : "inbox",
+      (email
+        ? (email.messageId ?? null)
+        : readRawHeader(raw, "message-id")
+      )?.slice(0, MAX_HEADER_LENGTH) ?? null,
       job.dedupeKey,
       email?.inReplyTo ?? null,
       email?.references ?? null,
@@ -160,13 +166,26 @@ export async function ingest(
   } catch (error) {
     // Unique constraint? Tell a retry of a stored job apart from a concurrent duplicate delivery.
     const existing = await env.DB.prepare(
-      "SELECT id FROM messages WHERE id = ?1 OR (mailbox_id = ?2 AND message_id = ?3)",
+      "SELECT id FROM messages WHERE id = ?1 OR (mailbox_id = ?2 AND dedupe_key = ?3)",
     )
       .bind(job.id, job.mailboxId, job.dedupeKey)
       .first<{ id: string }>();
     if (!existing) throw error;
     if (existing.id === job.id) return "already_stored";
+    // Concurrent duplicate: keep the .eml under dup/, as the email handler does, and drop the rest.
+    await env.MAIL.put(job.rawKey.replace(/^raw\//, "dup/"), raw, {
+      httpMetadata: { contentType: "message/rfc822" },
+      ...(object.customMetadata
+        ? { customMetadata: object.customMetadata }
+        : {}),
+    });
     await env.MAIL.delete([job.rawKey, ...writtenKeys]);
+    log({
+      event: "duplicate",
+      messageId: job.id,
+      status: "stored_as_duplicate",
+      dedupeKey: job.dedupeKey,
+    });
     return "duplicate";
   }
 }
@@ -197,5 +216,7 @@ export function readRawHeader(raw: ArrayBuffer, name: string): string | null {
   const line = unfolded
     .split(/\r?\n/)
     .find((l) => l.toLowerCase().startsWith(prefix));
-  return line ? line.slice(prefix.length).trim().slice(0, 998) : null;
+  return line
+    ? line.slice(prefix.length).trim().slice(0, MAX_HEADER_LENGTH)
+    : null;
 }
