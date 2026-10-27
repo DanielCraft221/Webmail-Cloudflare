@@ -18,7 +18,7 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 ### Falta
 
 - Ver o log da execução do Dependabot (npm) que falhou: https://github.com/DanielCraft221/Webmail-Cloudflare/actions/runs/40517091368. Suspeita: `trustPolicy` barrando `lefthook@2.2.2`.
-- Configurações manuais no GitHub (Secret scanning, Push protection, proteção da `main`, permissões do `GITHUB_TOKEN`).
+- Configurações manuais no GitHub: feitas (segurança do repositório, ruleset da `main`, permissões do `GITHUB_TOKEN`). A partir de agora, mudanças só por branch + PR.
 - Validação dos critérios de pronto pelo Daniel.
 
 ### Próximo passo

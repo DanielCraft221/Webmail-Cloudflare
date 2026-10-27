@@ -131,6 +131,7 @@ Regras:
 
 - **Uma etapa por vez.** Leia `docs/etapas/etapa-N.md`, apresente um plano curto e espere minha aprovação antes de começar.
 - Commits pequenos, no padrão Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `test:`).
+- **Nunca commitar nem dar push direto na `main`.** O ruleset do GitHub exige os checks `quality` e `secrets` verdes. Fluxo: criar uma branch (`feat/...`, `docs/...`), commitar nela, eu dou o push, abro o PR e faço o merge com o CI verde.
 - Rode `pnpm lint`, `pnpm typecheck` e `pnpm test` antes de cada commit.
 - Não faça `git push --force` e não reescreva o histórico sem me perguntar.
 - **Ao fim de cada sessão** (ou quando eu disser "vamos parar"), atualize `docs/progresso.md` com: o que foi feito, o que falta e o próximo passo exato. Assim a próxima sessão começa sem perder contexto.
