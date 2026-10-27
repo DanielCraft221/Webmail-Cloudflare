@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Secrets: never commit
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+# pnpm 12: .npmrc only holds registry credentials
+.npmrc
+
+# Cloudflare / Wrangler local state
+.wrangler/
+
+# Local databases (webmail SQLite: sessions, rate limit, bans)
+*.db
+*.db-*
+*.sqlite*
+
+# Build output
+dist/
+build/
+.svelte-kit/
+coverage/
+
+# Logs and OS noise
+*.log
+.DS_Store
+
+# Local Claude Code config (per machine)
+.claude/

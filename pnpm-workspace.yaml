@@ -1,0 +1,15 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Supply chain protections (see docs/decisoes.md).
+# Only install versions published at least 7 days ago (minutes).
+minimumReleaseAge: 10080
+# Fail if a package's publish trust level drops compared to earlier releases.
+trustPolicy: no-downgrade
+# Dependency install scripts stay blocked (strictDepBuilds is on by default).
+# Hooks are installed by the root "prepare" script, not by lefthook's postinstall.
+allowBuilds:
+  lefthook: false
+# Refuse to install if the Node version does not match "engines".
+engineStrict: true

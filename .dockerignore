@@ -1,0 +1,36 @@
+# .gitignore does NOT apply to `docker build`: the build context is the
+# folder on disk, so anything listed only in .gitignore can end up in the image.
+
+# Git metadata (full history, remotes)
+.git/
+.github/
+
+# Secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+# pnpm 12: .npmrc only holds registry credentials
+.npmrc
+
+# Local state and databases
+.wrangler/
+*.db
+*.db-*
+*.sqlite*
+
+# Dependencies and build output (rebuilt inside the image)
+node_modules/
+**/node_modules/
+dist/
+build/
+.svelte-kit/
+coverage/
+
+# Logs, OS noise, editor/agent config
+*.log
+.DS_Store
+.claude/

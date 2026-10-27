@@ -1,0 +1,21 @@
+# Git hooks, installed by `pnpm install` (root "prepare" script).
+pre-commit:
+  piped: true # run in order, stop at the first failure
+  jobs:
+    - name: block-secret-files
+      # Catches files forced past .gitignore with `git add -f`.
+      run: |
+        blocked=$(git diff --cached --name-only --diff-filter=ACMR \
+          | grep -E '(^|/)(\.env(\..+)?|\.dev\.vars(\..+)?|\.npmrc|[^/]+\.(pem|key))$' \
+          | grep -vE '(^|/)\.env\.example$')
+        if [ -n "$blocked" ]; then
+          echo "Blocked: secret files staged:"; echo "$blocked"; exit 1
+        fi
+
+    - name: gitleaks
+      # Fails closed: no gitleaks installed means no commit.
+      run: gitleaks git --pre-commit --staged --redact --no-banner --verbose
+
+    - name: biome
+      glob: "*.{js,ts,mjs,cjs,json,jsonc,svelte,css}"
+      run: pnpm exec biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}

@@ -1,0 +1,22 @@
+{
+  "name": "webmail-cloudflare",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=24.22.1 <25"
+  },
+  "scripts": {
+    "prepare": "lefthook install",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "lefthook": "2.2.1",
+    "typescript": "7.0.2"
+  }
+}
