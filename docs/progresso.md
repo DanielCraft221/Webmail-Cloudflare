@@ -21,7 +21,7 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 
 ### Falta
 
-- Ver o log da execução do Dependabot (npm) que falhou: https://github.com/DanielCraft221/Webmail-Cloudflare/actions/runs/40517091368. Suspeita: `trustPolicy` barrando `lefthook@2.2.2`.
+- _(nada da Etapa 1)_
 
 ### Próximo passo
 
@@ -29,7 +29,7 @@ Daniel coloca `docs/etapas/etapa-2.md` no repositório. Depois: ler o arquivo e 
 
 ### Observações
 
-- `lefthook@2.2.2` foi barrado pelo `trustPolicy` (publicado sem provenance, diferente das versões anteriores). Fixado em 2.2.1. Rever quando sair uma versão nova com provenance.
+- `lefthook@2.2.2` foi barrado pelo `trustPolicy` (publicado sem provenance, diferente das versões anteriores). Fixado em 2.2.1. O Dependabot falhou tentando essa versão; agora ela está no `ignore` do `.github/dependabot.yml`. Versões futuras com provenance voltam a ser atualizadas.
 - pnpm 12 grava o `pnpm-lock.yaml` em dois documentos YAML. Com isso o dependency graph do GitHub não enxerga as dependências: **Dependabot alerts e security updates não funcionam**, só as atualizações semanais de versão. Compensar revisando os PRs semanais do Dependabot.
 - No pnpm 12, o `.npmrc` serve só para credenciais: não existe no repositório e está no `.gitignore`.
 
