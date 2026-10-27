@@ -72,4 +72,4 @@ Veja [`SECURITY.md`](SECURITY.md) para reportar vulnerabilidades e [`docs/segred
 
 [AGPL-3.0-only](LICENSE).
 
-Em resumo: você pode usar, modificar e redistribuir este código. Se você rodar uma **versão modificada como serviço** acessível pela rede, precisa oferecer o código-fonte dessa versão aos usuários do serviço, sob a mesma licença. Por isso o webmail terá um link para o código-fonte no rodapé.
+Você pode usar, modificar e redistribuir este código. Se você rodar uma **versão modificada como serviço** acessível pela rede, precisa oferecer o código-fonte dessa versão aos usuários do serviço, sob a mesma licença. Por isso o webmail terá um link para o código-fonte no rodapé.
