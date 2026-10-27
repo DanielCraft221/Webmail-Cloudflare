@@ -143,3 +143,14 @@ Registro curto das decisões já tomadas e seus motivos. Mudanças de arquitetur
 **Decisão:** `esbuild` e `workerd` (dependências do Wrangler) ficam com `false` no `allowBuilds`.
 
 **Motivo:** os dois trazem o binário nativo num pacote opcional por plataforma. O script de instalação só confere ou copia esse binário, e os testes e o `wrangler types` funcionam sem ele. Menos código de terceiros rodando no `pnpm install`.
+
+## Deduplicação por `Message-ID` e cabeçalhos; duplicata guardada, não descartada
+
+**Decisão:** a chave de deduplicação é a caixa + SHA-256 do `Message-ID` junto com os cabeçalhos `From`, `Date`, `Subject` e `To` normalizados (espaços repetidos viram um só, sem espaços nas pontas). Sem `Message-ID`, é o SHA-256 do `.eml` inteiro. Uma duplicata não é descartada: o `.eml` vai para `dup/AAAA/MM/<uuid>.eml` no R2, com os mesmos `customMetadata`, sem entrar na fila, e o log registra só o UUID e o hash da chave.
+
+**Motivo:** a deduplicação só pelo `Message-ID` deixava perder mensagens em silêncio. Sistemas com IDs sequenciais ou repetidos, ou um terceiro que conhecesse o `Message-ID` de uma mensagem futura, fariam a mensagem verdadeira ser descartada. Com os cabeçalhos na chave, o mesmo `Message-ID` com conteúdo diferente vira mensagem nova. E se a decisão de duplicata estiver errada, o `.eml` continua guardado.
+
+**Custo aceito:**
+
+- A mesma mensagem reenviada com um cabeçalho reescrito no caminho (por exemplo, um assunto recodificado) entra duas vezes na caixa. Duplicar é melhor que perder.
+- O `dup/` cresce sem limpeza automática. A limpeza e o reprocessamento estão em "Depois" no `progresso.md`.

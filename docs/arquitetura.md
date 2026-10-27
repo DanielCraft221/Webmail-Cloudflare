@@ -23,7 +23,7 @@ Visão geral no [`README.md`](../README.md). Este documento descreve os fluxos e
 3. **Handler `email`** (`apps/mail-core/src/email.ts`), curto e sem parse:
    1. Procura a caixa **ativa** do destinatário (em minúsculas) no D1. Não existe: `setReject("Unknown recipient")`.
    2. `rawSize` acima de 25 MiB: `setReject`.
-   3. Lê o `raw` uma vez e calcula a chave de deduplicação: o `Message-ID` ou, sem ele, `sha256:<hex>` do `.eml`. Já existe na caixa: descarta.
+   3. Lê o `raw` uma vez e calcula a chave de deduplicação: SHA-256 do `Message-ID` com os cabeçalhos `From`, `Date`, `Subject` e `To` normalizados. Sem `Message-ID`, SHA-256 do `.eml` inteiro. Se a chave já existe na caixa, a mensagem é uma duplicata: o `.eml` vai para `dup/AAAA/MM/<uuid>.eml` no R2, com os mesmos metadados, e não entra na fila. Nada é descartado.
    4. Grava o `.eml` em `raw/AAAA/MM/<uuid>.eml` no R2, com `customMetadata`: `mailboxId`, `envelopeTo`, `envelopeFrom`, `receivedAt` e `dedupeKey`. Com isso o R2 sozinho basta para reprocessar, mesmo com cópia oculta (o destinatário não aparece nos cabeçalhos).
    5. Envia para a fila `mail-ingest` só a chave e esses dados. Assunto e corpo não entram na fila.
 4. **Consumidor da fila** (`apps/mail-core/src/ingest.ts`), uma mensagem por vez:
@@ -43,7 +43,7 @@ Visão geral no [`README.md`](../README.md). Este documento descreve os fluxos e
 | Parse falha (MIME quebrado) | A mensagem é registrada com `parse_status = 'failed'`, o assunto lido direto dos cabeçalhos e o `.eml` guardado |
 | D1 ou R2 falham no consumidor | `retry` com espera de 30 s, dobrando até 1 h, por até 10 tentativas (cerca de 4 h). Depois vai para a DLQ `mail-ingest-dlq` |
 | Mensagem na DLQ | Fica lá por 4 dias (sem consumidor). O `.eml` continua no R2 para sempre. Reprocessamento: em "Depois" no `progresso.md` |
-| Duas entregas da mesma mensagem ao mesmo tempo | O índice único barra a segunda. O consumidor apaga os objetos dela no R2 e confirma a mensagem da fila |
+| Duas entregas da mesma mensagem ao mesmo tempo | O índice único barra a segunda. O consumidor move o `.eml` dela para `dup/`, apaga o corpo e os anexos dela e confirma a mensagem da fila |
 | Retry de uma mensagem que já tinha sido gravada | O consumidor reconhece o próprio id e só confirma |
 
 ### Autenticação (SPF, DKIM, DMARC)
@@ -52,7 +52,7 @@ O remetente pode colocar um `Authentication-Results` falso na mensagem. Por isso
 
 ### Logs
 
-Só o UUID da mensagem, a caixa, o domínio do remetente, o tamanho, o status e o nome do erro. Nunca assunto, corpo, nome de anexo, endereço completo do remetente nem o endereço de reserva.
+Só o UUID da mensagem, a caixa, o domínio do remetente, o tamanho, o status, o nome do erro e, nas duplicatas, o hash da chave de deduplicação. Nunca assunto, corpo, nome de anexo, endereço completo do remetente nem o endereço de reserva.
 
 ### Por que o servidor doméstico não fica no caminho de recebimento
 
