@@ -11,14 +11,23 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 - Plano do PR 1 aprovado com duas mudanças: fila (Cloudflare Queues) entre o recebimento e o parse, e confiança só no `Authentication-Results` do topo com `authserv-id` confiável.
 - PR 1 (branch `etapa-2/recebimento`): scaffold do `apps/mail-core`, migração `0001`, seed, handler `email`, consumidor da fila, 34 testes, documentação e `security-audit`.
 
+### Feito (2026-10-28)
+
+- PR 1 mergeado (com o complemento da deduplicação em `etapa-2/dedupe`).
+- Token do Wrangler criado (Account API Token, sem permissões de zona, expira em 2026-11-30). `wrangler whoami` funcionando.
+- Criados na Cloudflare: D1 `webmail-db` (`enam`), R2 `webmail-mail` (`enam`, `r2.dev` desligado), filas `mail-ingest` e `mail-ingest-dlq` (retenção de 14 dias).
+- Branch `etapa-2/deploy-config`: `database_id` real, `observability` ligado, `docs/cloudflare.md`.
+
 ### Falta
 
-- Revisão e merge do PR 1.
-- PR 2 (`etapa-2/deploy`): permissões do token, D1, R2, filas, secret `FALLBACK_FORWARD_TO`, destino verificado no Email Routing, deploy, catch-all, teste ponta a ponta, `inbox:list` e os testes reais de `docs/cloudflare-email-routing.md` (exceção no handler, cabeçalhos de autenticação, memória, `forward()` depois de ler o `raw`, `authserv-id` forjado).
+- Merge do PR `etapa-2/deploy-config`.
+- A partir da `main`: migração e seed remotos, deploy, secret `FALLBACK_FORWARD_TO`, endereço de reserva verificado, DNS atual, Email Routing e catch-all pelo painel.
+- Testes reais: Gmail com anexo para `contato@`, endereço inexistente, `authserv-id` real, `forward()` depois de ler o `raw`, exceção no handler (Worker descartável). Também `inbox:list`.
+- Branch `etapa-2/deploy-ajustes` com o `authserv-id` e as correções dos testes, e novo deploy.
 
 ### Próximo passo
 
-Depois do merge do PR 1: na `main`, `git pull --ff-only`, criar o branch `etapa-2/deploy` e apresentar as permissões do token (tarefa 2).
+Depois do merge do `etapa-2/deploy-config`: na `main`, `git pull --ff-only` e mostrar o comando da migração remota.
 
 
 ## Etapa 1: concluída (2026-10-27)
@@ -56,6 +65,6 @@ Etapa 2. O `docs/etapas/etapa-2.md` já está na pasta, mas ainda não foi commi
 
 Ideias que ainda não entraram no roteiro.
 
-- Ferramenta de reprocessamento: reenviar para a fila os `.eml` do R2 que não têm linha no D1 (DLQ expirada após 4 dias), usando o `customMetadata` do objeto.
+- Ferramenta de reprocessamento: reenviar para a fila os `.eml` do R2 que não têm linha no D1 (DLQ expirada após 14 dias), usando o `customMetadata` do objeto.
 - Alerta quando chegar mensagem na DLQ `mail-ingest-dlq`.
 - Limpeza das duplicatas em `dup/` no R2 (hoje ficam para sempre). O reprocessamento acima deve ignorar `dup/`.

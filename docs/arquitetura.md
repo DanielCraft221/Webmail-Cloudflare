@@ -42,7 +42,7 @@ Visão geral no [`README.md`](../README.md). Este documento descreve os fluxos e
 | A fila falha depois de gravar no R2 | A mensagem é encaminhada, e o `.eml` fica no R2 com os metadados |
 | Parse falha (MIME quebrado) | A mensagem é registrada com `parse_status = 'failed'`, o assunto lido direto dos cabeçalhos e o `.eml` guardado |
 | D1 ou R2 falham no consumidor | `retry` com espera de 30 s, dobrando até 1 h, por até 10 tentativas (cerca de 4 h). Depois vai para a DLQ `mail-ingest-dlq` |
-| Mensagem na DLQ | Fica lá por 4 dias (sem consumidor). O `.eml` continua no R2 para sempre. Reprocessamento: em "Depois" no `progresso.md` |
+| Mensagem na DLQ | Fica lá por 14 dias (sem consumidor). O `.eml` continua no R2 para sempre. Reprocessamento: em "Depois" no `progresso.md` |
 | Duas entregas da mesma mensagem ao mesmo tempo | O índice único barra a segunda. O consumidor move o `.eml` dela para `dup/`, apaga o corpo e os anexos dela e confirma a mensagem da fila |
 | Retry de uma mensagem que já tinha sido gravada | O consumidor reconhece o próprio id e só confirma |
 

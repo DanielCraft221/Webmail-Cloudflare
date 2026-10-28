@@ -6,13 +6,21 @@
   // No public HTTP surface in Etapa 2: no workers.dev URL, no preview URLs, no routes.
   "workers_dev": false,
   "preview_urls": false,
+  // Workers Logs keeps only our log() entries, which never hold subject, body, attachment names
+  // or full sender. Invocation logs are off: an email event carries the full envelope sender (mailFrom).
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "invocation_logs": false
+    }
+  },
   // account_id is intentionally absent: Wrangler reads CLOUDFLARE_ACCOUNT_ID (docs/decisoes.md).
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "webmail-db",
-      // PLACEHOLDER: replaced with the real id in PR 2 (etapa-2/deploy).
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // Not a secret: useless without an API token (docs/decisoes.md).
+      "database_id": "64f7db21-6273-473a-9297-3e3d03ea7d41",
       "migrations_dir": "migrations"
     }
   ],

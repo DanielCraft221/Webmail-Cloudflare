@@ -127,7 +127,7 @@ Registro curto das decisões já tomadas e seus motivos. Mudanças de arquitetur
 
 **Limitações aceitas:**
 
-- Uma mensagem que esgota os retries fica na DLQ por só 4 dias. O `.eml` continua no R2, com os metadados do envelope no `customMetadata`, mas para reaparecer no webmail precisa de uma ferramenta de reprocessamento (em "Depois" no `progresso.md`).
+- Uma mensagem que esgota os retries fica na DLQ por 14 dias (retenção configurada na criação das filas; o padrão seria 4). O `.eml` continua no R2, com os metadados do envelope no `customMetadata`, mas para reaparecer no webmail precisa de uma ferramenta de reprocessamento (em "Depois" no `progresso.md`).
 - O endereço de reserva fica como secret, e não em `vars`, porque é um e-mail pessoal e o repositório é público. O código recusa um endereço no próprio domínio do destinatário, para não criar um loop.
 
 ## Só o `Authentication-Results` do topo, e só de `authserv-id` confiável
@@ -154,3 +154,9 @@ Registro curto das decisões já tomadas e seus motivos. Mudanças de arquitetur
 
 - A mesma mensagem reenviada com um cabeçalho reescrito no caminho (por exemplo, um assunto recodificado) entra duas vezes na caixa. Duplicar é melhor que perder.
 - O `dup/` cresce sem limpeza automática. A limpeza e o reprocessamento estão em "Depois" no `progresso.md`.
+
+## Email Routing pelo painel; token do Wrangler sem permissões de zona
+
+**Decisão:** ativar o Email Routing, verificar o endereço de reserva e criar o catch-all são feitos à mão no painel (passo a passo em `docs/cloudflare.md`). O token do Wrangler só tem permissões de conta (Workers Scripts, D1, R2, Queues, Workers Tail, User Details) e expira em 2026-11-30.
+
+**Motivo:** ativar o Email Routing pela API exige *Zone Settings: Edit*, que também permite mudar outras configurações da zona (SSL, por exemplo). São três ações feitas uma vez só, então não compensa deixar essa permissão num token que fica guardado no servidor.
