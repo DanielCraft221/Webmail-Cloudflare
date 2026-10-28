@@ -39,7 +39,7 @@ A relação usuário ↔ caixa é configurável no banco, **nunca fixa no códig
 ```
 Internet ──MX──> Cloudflare Email Routing ──> Worker "mail-core" (apps/mail-core)
                                                 ├─ email(): valida, deduplica, grava .eml no R2, envia a chave para a fila
-                                                │     └─ falha no R2, na fila ou no D1: forward() para endereço de reserva (nunca setReject)
+                                                │     └─ falha no R2, na fila ou no D1: exceção = erro temporário, o remetente tenta de novo (nunca setReject)
                                                 ├─ Queue "mail-ingest" ──> queue(): parse, anexos no R2, metadados no D1
                                                 │     └─ retries com espera crescente; esgotados: DLQ "mail-ingest-dlq"
                                                 ├─ R2: .eml bruto, corpo parseado, anexos
@@ -175,3 +175,4 @@ Ideias novas não entram no roteiro direto: vão para a seção "Depois" do `doc
 - `pnpm typecheck`: TypeScript em todos os pacotes
 - `pnpm test`: Vitest em todos os pacotes
 - `pnpm --filter @webmail/mail-core types`: regenera `apps/mail-core/worker-configuration.d.ts` depois de mudar o `wrangler.jsonc`
+- `pnpm --filter mail-core inbox:list`: lista as 20 últimas mensagens do D1 remoto (com `spf`, `dkim`, `dmarc`), só leitura, sem corpo nem endereço completo do remetente (precisa do token carregado, veja `docs/cloudflare.md`)

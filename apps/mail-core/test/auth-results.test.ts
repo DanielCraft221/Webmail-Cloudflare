@@ -9,15 +9,35 @@ const header = (value: string) => ({
 const trusted = ["mx.trusted.test"];
 
 describe("parseAuthenticationResults", () => {
-  it("is all unknown with the default (empty) trust list", () => {
+  it("trusts only Cloudflare's authserv-id by default", () => {
+    expect(
+      parseAuthenticationResults([
+        header("mx.trusted.test; spf=pass; dkim=pass; dmarc=pass"),
+      ]),
+    ).toEqual({ spf: "unknown", dkim: "unknown", dmarc: "unknown" });
+    expect(
+      parseAuthenticationResults([
+        header("mx.cloudflare.net; spf=pass; dkim=pass; dmarc=pass"),
+      ]).dmarc,
+    ).toBe("pass");
+  });
+
+  // Invented values in the format Cloudflare writes: SPF for HELO first, then for MAIL FROM.
+  it("prefers the smtp.mailfrom SPF result over smtp.helo", () => {
     const result = parseAuthenticationResults([
-      header("mx.trusted.test; spf=pass; dkim=pass; dmarc=pass"),
+      header(
+        "mx.cloudflare.net; dkim=pass header.d=example.net header.s=sel1 header.b=AbCdEf12; dmarc=pass header.from=example.net policy.dmarc=quarantine; spf=none (mx.cloudflare.net: no SPF records found for postmaster@mail-out.example.net) smtp.helo=mail-out.example.net; spf=pass (mx.cloudflare.net: domain of bounce@example.net designates 192.0.2.10 as permitted sender) smtp.mailfrom=bounce@example.net; arc=pass smtp.remote-ip=192.0.2.10",
+      ),
     ]);
-    expect(result).toEqual({
-      spf: "unknown",
-      dkim: "unknown",
-      dmarc: "unknown",
-    });
+    expect(result).toEqual({ spf: "pass", dkim: "pass", dmarc: "pass" });
+  });
+
+  it("falls back to the first SPF result without smtp.mailfrom", () => {
+    const result = parseAuthenticationResults(
+      [header("mx.trusted.test; spf=none smtp.helo=mail.example.net")],
+      trusted,
+    );
+    expect(result.spf).toBe("none");
   });
 
   it("is all unknown without any Authentication-Results", () => {

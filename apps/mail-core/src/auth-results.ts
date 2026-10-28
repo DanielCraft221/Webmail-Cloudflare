@@ -1,10 +1,7 @@
 import type { Header } from "postal-mime";
 
-/**
- * authserv-ids whose Authentication-Results header is trusted. Empty until PR 2 confirms,
- * on a real message, the value Cloudflare writes: until then every result is "unknown".
- */
-export const TRUSTED_AUTHSERV_IDS: readonly string[] = [];
+/** authserv-ids whose Authentication-Results header is trusted. Confirmed on real mail in PR 2. */
+export const TRUSTED_AUTHSERV_IDS: readonly string[] = ["mx.cloudflare.net"];
 
 export type AuthResults = { spf: string; dkim: string; dmarc: string };
 
@@ -38,15 +35,20 @@ export function parseAuthenticationResults(
   if (!trusted.includes(authservId)) return UNKNOWN;
 
   const results = { ...UNKNOWN };
+  let mailfromSpf: string | undefined;
   for (const part of resinfo) {
     const match = /^\s*(spf|dkim|dmarc)\s*=\s*([a-z]+)/i.exec(part);
     if (!match?.[1] || !match[2]) continue;
     const method = match[1].toLowerCase() as keyof AuthResults;
     const value = match[2].toLowerCase();
+    if (!RESULTS.has(value)) continue;
+    // Cloudflare reports SPF for HELO and for MAIL FROM; only MAIL FROM is the one DMARC uses.
+    if (method === "spf" && /\bsmtp\.mailfrom\s*=/i.test(part))
+      mailfromSpf ??= value;
     // First result per method wins (a message can carry several DKIM signatures).
-    if (results[method] === "unknown" && RESULTS.has(value))
-      results[method] = value;
+    if (results[method] === "unknown") results[method] = value;
   }
+  if (mailfromSpf) results.spf = mailfromSpf;
   return results;
 }
 

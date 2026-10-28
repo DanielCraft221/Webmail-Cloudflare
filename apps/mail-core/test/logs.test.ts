@@ -32,10 +32,11 @@ describe("logs", () => {
         },
       } as unknown as D1Database,
     });
-    await deliver(plain, { env: failing });
+    await expect(deliver(plain, { env: failing })).rejects.toThrow();
 
     const logged = output();
     expect(logged).toContain('"event":"queued"');
+    expect(logged).toContain('"event":"internal_error"');
     expect(logged).toContain('"senderDomain":"example.net"');
     for (const secret of [
       "Orcamento sigiloso",

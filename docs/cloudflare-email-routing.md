@@ -27,14 +27,25 @@ O `message` é um `ForwardableEmailMessage`:
 - Nenhuma página diz o que o remetente recebe quando o handler lança uma exceção: erro temporário (4xx), erro permanente (5xx) ou mensagem descartada.
 - O exemplo oficial de "Error handling" termina em `setReject("Internal processing error")`, que é recusa permanente. Este projeto **não** segue esse exemplo, porque erro interno nunca vira `setReject`.
 - Não existe método de "falha temporária" no `ForwardableEmailMessage`. Um [tópico da comunidade](https://community.cloudflare.com/t/is-it-possible-to-return-a-transient-failure-from-an-email-worker/599938) (antigo) pede exatamente isso e conclui que a API só oferece a recusa permanente.
-- **Plano adotado:** o handler faz o mínimo (valida, deduplica, grava o `.eml` no R2 e manda a chave para uma fila). Em erro interno, encaminha a mensagem com `forward()` para um endereço de reserva verificado. Só relança a exceção se não houver endereço de reserva ou se o `forward()` também falhar. Nunca `setReject`. O efeito da exceção é medido no PR 2 (veja "Testes reais pendentes").
+- **Medido no PR 2 (2026-10-28):** a exceção vira **falha temporária**. O Registro de atividade mostrou "upstream (worker:mail-test-scratch) temporary error: worker script threw an exception", e o Gmail tentou de novo 7 vezes em cerca de 4 h. Detalhes em `decisoes.md`.
+- **Plano adotado:** o handler faz o mínimo (valida, deduplica, grava o `.eml` no R2 e manda a chave para uma fila). Em erro interno, relança a exceção. Nunca `setReject`.
 
 ## Cabeçalhos de autenticação na entrada: **não documentado**
 
 - A página [Headers](https://developers.cloudflare.com/email-service/reference/headers/) trata só do **envio**: lista `ARC-*`, `DKIM-Signature` e outros cabeçalhos que a Cloudflare gera ao enviar.
 - Nada documenta quais cabeçalhos o Email Routing acrescenta numa mensagem recebida (`Authentication-Results`, `ARC-Authentication-Results`, `Received-SPF`) nem o formato deles.
 - **Risco:** um remetente pode incluir o próprio `Authentication-Results` falso (ex.: `dmarc=pass`). Só vale o cabeçalho acrescentado pela Cloudflare, que é o primeiro de cima para baixo e tem o identificador do servidor da Cloudflare. Como `message.headers.get()` junta os cabeçalhos repetidos, a leitura usa a lista ordenada de cabeçalhos do `postal-mime`.
-- **Plano adotado:** ler só o primeiro `Authentication-Results` (RFC 8601), e só se o `authserv-id` estiver em `TRUSTED_AUTHSERV_IDS`. A lista começa vazia, então tudo fica `unknown` até o PR 2 confirmar o identificador real e o formato com uma mensagem real.
+- **Plano adotado:** ler só o primeiro `Authentication-Results` (RFC 8601), e só se o `authserv-id` estiver em `TRUSTED_AUTHSERV_IDS`.
+- **Medido no PR 2 (2026-10-28), numa mensagem real do Gmail:** o primeiro `Authentication-Results` vem logo abaixo do `Received` da Cloudflare, com `authserv-id` `mx.cloudflare.net`. Formato (valores trocados):
+
+  ```
+  Authentication-Results: mx.cloudflare.net; dkim=pass header.d=example.net header.s=sel1 header.b=...;
+    dmarc=pass header.from=example.net policy.dmarc=quarantine;
+    spf=none (...) smtp.helo=mail-out.example.net; spf=pass (...) smtp.mailfrom=example.net;
+    arc=pass smtp.remote-ip=192.0.2.10
+  ```
+
+  São dois resultados de SPF: o do HELO e o do remetente do envelope. O código usa o de `smtp.mailfrom`. A Cloudflare também acrescenta `Received-SPF`, `ARC-Seal` e `ARC-Message-Signature` (`d=cloudflare-email.net`) e `ARC-Authentication-Results`.
 
 ## Limites
 
@@ -77,7 +88,7 @@ Fontes: [Limits](https://developers.cloudflare.com/queues/platform/limits/), [Ba
 
 ## Metadados do R2
 
-O total de metadados de um objeto é de 8.192 bytes ([R2 limits](https://developers.cloudflare.com/r2/platform/limits/)). O `customMetadata` do `.eml` cabe com folga, porque a chave de deduplicação é sempre um hash SHA-256. A documentação não diz se aceita caracteres fora do ASCII (endereços SMTPUTF8): se a gravação falhar, o handler encaminha para o endereço de reserva.
+O total de metadados de um objeto é de 8.192 bytes ([R2 limits](https://developers.cloudflare.com/r2/platform/limits/)). O `customMetadata` do `.eml` cabe com folga, porque a chave de deduplicação é sempre um hash SHA-256. A documentação não diz se aceita caracteres fora do ASCII (endereços SMTPUTF8): se a gravação falhar, o handler lança a exceção (falha temporária).
 
 ## Testes com Vitest
 
@@ -86,11 +97,18 @@ O total de metadados de um objeto é de 8.192 bytes ([R2 limits](https://develop
 - A documentação não tem helper para o handler `email`. O teste chama `worker.email(mensagemFalsa, env, ctx)` com um objeto que imita o `ForwardableEmailMessage`.
 - Para teste manual, o `wrangler dev` aceita `POST /cdn-cgi/local/email` com uma mensagem RFC 5322, que precisa ter `Message-ID` ([Test email routing locally](https://developers.cloudflare.com/email-service/observability/local-development/routing/)).
 
-## Testes reais pendentes (PR 2)
+## Testes reais (PR 2, 2026-10-28)
 
-1. **Exceção no handler:** um Worker de teste separado, que sempre lança exceção, recebe um endereço de teste. Mandamos uma mensagem do Gmail e vemos se ele tenta de novo, se devolve erro ou se a mensagem some. O Worker e a regra são apagados depois.
-2. **Cabeçalhos de autenticação:** guardar e ler os cabeçalhos de uma mensagem real recebida. Ajustar o código e os testes se o formato for diferente.
-3. **Memória:** mensagem perto de 25 MiB com anexo.
-4. **`forward()` depois de ler o `raw`:** não documentado, e é a ordem em que o encaminhamento de reserva acontece. Testar forçando uma falha do R2 num Worker de teste.
-5. **`Authentication-Results` forjado com o `authserv-id` da Cloudflare:** confirmar se a Cloudflare remove ou renomeia esse cabeçalho quando ele já vem na mensagem (RFC 8601, seção 5). Só depois disso preencher `TRUSTED_AUTHSERV_IDS`.
-6. **Workers Logs sem o remetente completo:** depois da primeira mensagem real, conferir no painel que nenhuma entrada guardada tem o `mailFrom` (os *invocation logs* estão desligados no `wrangler.jsonc`).
+| Teste | Resultado |
+| --- | --- |
+| Gmail para `contato@` com anexo de 2,14 MB | Passou: `.eml`, corpo e anexo no R2, linha no D1 com `parse_status = ok` |
+| Gmail para endereço inexistente | Passou: `555 5.7.1 Unknown recipient`, nada gravado |
+| `authserv-id` real | `mx.cloudflare.net` (formato acima). Achado: dois resultados de SPF, corrigido no código |
+| `forward()` depois de ler o `raw` | Funcionou (Worker descartável). O encaminhamento de reserva foi removido depois, então isso não é mais usado |
+| Exceção no handler | Falha temporária, o remetente tenta de novo (acima e em `decisoes.md`) |
+
+Pendentes:
+
+1. **Memória:** depois do deploy, e-mail com anexo de 18 a 20 MB; conferir os logs do consumidor.
+2. **`Authentication-Results` forjado com o `authserv-id` da Cloudflare:** pelo Gmail não dá para testar se a Cloudflare remove ou renomeia esse cabeçalho (RFC 8601, seção 5). Veja o reforço previsto antes da Etapa 6 em `decisoes.md`.
+3. **Workers Logs sem o remetente completo:** conferir no painel que nenhuma entrada guardada tem o `mailFrom` (os *invocation logs* estão desligados no `wrangler.jsonc`).

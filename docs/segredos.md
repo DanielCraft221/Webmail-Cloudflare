@@ -21,7 +21,6 @@ Atualize a cada segredo criado ou rotacionado. **Sem valores.**
 | Nome | Local | Quem usa | Permissões | Última rotação |
 | ---- | ----- | -------- | ---------- | -------------- |
 | Token do Wrangler (Account API Token) | `~/.config/cloudflare/wrangler.env` no servidor, `chmod 600`, fora do repositório | Wrangler neste servidor (deploy, D1, R2, filas, logs) | Workers Scripts Edit, D1 Edit, Workers R2 Storage Edit, Queues Edit, Workers Tail Read, User Details Read. Nenhuma permissão de zona | Criado em 2026-10-28, expira em 2026-11-30 |
-| `FALLBACK_FORWARD_TO` | `wrangler secret` do Worker `mail-core` | `mail-core` (encaminhamento de reserva) | Não é credencial: é um endereço pessoal, guardado como secret para não ficar público | A criar no PR 2 |
 
 Tokens SMTP: rotação a cada 6 meses, ou na hora em caso de suspeita.
 
