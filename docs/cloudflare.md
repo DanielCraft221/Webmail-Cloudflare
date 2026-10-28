@@ -122,7 +122,7 @@ Não crie regras por endereço: quem decide se um endereço existe é o D1 (`doc
 pnpm --filter mail-core inbox:list
 ```
 
-Lista as 20 últimas mensagens do D1 remoto: data, caixa, domínio do remetente, assunto, pasta e `parse_status`. Só lê (`SELECT`). Não mostra corpo nem o endereço completo do remetente.
+Lista as 20 últimas mensagens do D1 remoto: data, caixa, domínio do remetente, assunto, pasta, `parse_status`, `spf`, `dkim` e `dmarc`. Só lê (`SELECT`). Não mostra corpo nem o endereço completo do remetente.
 
 ## 7. Logs
 
