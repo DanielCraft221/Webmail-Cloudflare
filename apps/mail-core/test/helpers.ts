@@ -8,9 +8,7 @@ import { vi } from "vitest";
 import worker from "../src/index";
 import type { IngestJob } from "../src/ingest";
 
-export const FALLBACK = "reserva@example.org";
-
-/** Test env: queue sends are captured instead of delivered, and a fallback address is set. */
+/** Test env: queue sends are captured instead of delivered. */
 export function testEnv(overrides: Partial<Env> = {}): {
   env: Env;
   jobs: IngestJob[];
@@ -25,7 +23,6 @@ export function testEnv(overrides: Partial<Env> = {}): {
     env: {
       ...env,
       INGEST_QUEUE: queue,
-      FALLBACK_FORWARD_TO: FALLBACK,
       ...overrides,
     },
     jobs,
@@ -38,7 +35,6 @@ export function fakeEmail(
     to?: string;
     from?: string;
     rawSize?: number;
-    forwardFails?: boolean;
   } = {},
 ) {
   const bytes = new TextEncoder().encode(raw);
@@ -51,10 +47,7 @@ export function fakeEmail(
       headers.append(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
   }
   const setReject = vi.fn();
-  const forward = vi.fn(async () => {
-    if (options.forwardFails) throw new Error("Forward failed");
-    return { messageId: "forwarded" };
-  });
+  const forward = vi.fn(async () => ({ messageId: "forwarded" }));
   const message = {
     from: options.from ?? "ana.teste@example.net",
     to: options.to ?? "contato@survivus.com.br",

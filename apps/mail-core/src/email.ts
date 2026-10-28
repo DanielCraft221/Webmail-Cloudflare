@@ -9,7 +9,8 @@ const DEDUPE_HEADERS = ["from", "date", "subject", "to"] as const;
 
 /**
  * Accepts or rejects the message, then stores the raw .eml and queues it for parsing.
- * Internal errors never call setReject (a permanent failure): they forward to the fallback address.
+ * Internal errors never call setReject (a permanent failure): they throw, which Email Routing
+ * reports to the sender as a temporary failure, so the sender retries (docs/decisoes.md).
  */
 export async function handleEmail(
   message: ForwardableEmailMessage,
@@ -27,7 +28,7 @@ export async function handleEmail(
   try {
     mailboxId = await findActiveMailbox(env.DB, recipient);
   } catch (error) {
-    return fallback(message, env, context, "mailbox_lookup_failed", error);
+    return internalError(context, "mailbox_lookup_failed", error);
   }
 
   if (mailboxId === null) {
@@ -87,13 +88,7 @@ export async function handleEmail(
     await env.INGEST_QUEUE.send(job);
     log({ ...context, event: "queued", messageId: id, status: "queued" });
   } catch (error) {
-    return fallback(
-      message,
-      env,
-      { ...context, messageId: id },
-      "store_failed",
-      error,
-    );
+    return internalError({ ...context, messageId: id }, "store_failed", error);
   }
 }
 
@@ -146,35 +141,11 @@ function normalizeHeader(value: string | null): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
-/**
- * Forwards the message to the verified fallback address. With no usable fallback, or if the
- * forward fails too, rethrows so Email Routing treats it as an internal error, never a rejection.
- */
-async function fallback(
-  message: ForwardableEmailMessage,
-  env: Env,
+function internalError(
   context: LogEntry,
   status: string,
   error: unknown,
-): Promise<void> {
+): never {
   log({ ...context, event: "internal_error", status, error: errorName(error) });
-
-  const target = env.FALLBACK_FORWARD_TO?.trim().toLowerCase();
-  // A fallback on the recipient's own domain would route straight back to this Worker.
-  if (!target || domainOf(target) === domainOf(message.to)) {
-    log({ ...context, event: "fallback_unavailable" });
-    throw error;
-  }
-
-  try {
-    await message.forward(target);
-    log({ ...context, event: "forwarded_to_fallback" });
-  } catch (forwardError) {
-    log({
-      ...context,
-      event: "fallback_failed",
-      error: errorName(forwardError),
-    });
-    throw error;
-  }
+  throw error;
 }

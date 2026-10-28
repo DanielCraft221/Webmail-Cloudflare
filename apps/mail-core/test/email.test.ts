@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MAX_MESSAGE_BYTES } from "../src/email";
+import worker from "../src/index";
 import broken from "./fixtures/broken.eml?raw";
 import dmarcFail from "./fixtures/dmarc-fail.eml?raw";
 import htmlAttachment from "./fixtures/html-attachment.eml?raw";
@@ -10,7 +11,7 @@ import {
   attachments,
   deliver,
   deliverAndIngest,
-  FALLBACK,
+  fakeEmail,
   mailboxId,
   messages,
   r2Keys,
@@ -182,73 +183,62 @@ describe("email handler and consumer: storing", () => {
     expect(await env.MAIL.head(String(row?.raw_key))).not.toBeNull();
   });
 
-  it("keeps DMARC results unknown while no authserv-id is trusted", async () => {
+  it("keeps DMARC results unknown for an untrusted authserv-id", async () => {
     await deliverAndIngest(dmarcFail);
     const [row] = await messages();
     expect(row).toMatchObject({ folder: "inbox", dmarc: "unknown" });
   });
 });
 
-describe("email handler: internal errors never reject", () => {
+describe("email handler: internal errors throw (temporary failure)", () => {
   const failingDb = {
     prepare: () => {
       throw new Error("D1 unavailable");
     },
   } as unknown as D1Database;
 
-  it("forwards to the fallback when D1 fails", async () => {
-    const { setReject, forward, jobs } = await deliver(plain, {
-      env: testEnv({ DB: failingDb }),
-    });
+  /** Delivers expecting the original error to propagate, and returns the fake message's spies. */
+  async function deliverFailing(
+    target: ReturnType<typeof testEnv>,
+    error: string,
+  ) {
+    const email = fakeEmail(plain);
+    await expect(worker.email(email.message, target.env)).rejects.toThrow(
+      error,
+    );
+    return email;
+  }
+
+  it("throws when D1 fails, without rejecting or forwarding", async () => {
+    const target = testEnv({ DB: failingDb });
+    const { setReject, forward } = await deliverFailing(
+      target,
+      "D1 unavailable",
+    );
     expect(setReject).not.toHaveBeenCalled();
-    expect(forward).toHaveBeenCalledWith(FALLBACK);
-    expect(jobs).toEqual([]);
+    expect(forward).not.toHaveBeenCalled();
+    expect(target.jobs).toEqual([]);
   });
 
-  it("forwards to the fallback when R2 fails", async () => {
+  it("throws when R2 fails", async () => {
     const failingR2 = {
       put: () => Promise.reject(new Error("R2 unavailable")),
     } as unknown as R2Bucket;
-    const { setReject, forward } = await deliver(plain, {
-      env: testEnv({ MAIL: failingR2 }),
-    });
+    const { setReject, forward } = await deliverFailing(
+      testEnv({ MAIL: failingR2 }),
+      "R2 unavailable",
+    );
     expect(setReject).not.toHaveBeenCalled();
-    expect(forward).toHaveBeenCalledWith(FALLBACK);
+    expect(forward).not.toHaveBeenCalled();
   });
 
-  it("forwards to the fallback when the queue fails, keeping the .eml in R2", async () => {
+  it("throws when the queue fails, keeping the .eml in R2", async () => {
     const target = testEnv();
     target.env.INGEST_QUEUE = {
       send: () => Promise.reject(new Error("Queue unavailable")),
     } as unknown as Queue;
-    const { setReject, forward } = await deliver(plain, { env: target });
+    const { setReject } = await deliverFailing(target, "Queue unavailable");
     expect(setReject).not.toHaveBeenCalled();
-    expect(forward).toHaveBeenCalledWith(FALLBACK);
     expect(await r2Keys("raw/")).toHaveLength(1);
-  });
-
-  it("rethrows the original error when the forward fails too", async () => {
-    const target = testEnv({ DB: failingDb });
-    await expect(
-      deliver(plain, { env: target, forwardFails: true }),
-    ).rejects.toThrow("D1 unavailable");
-  });
-
-  it("rethrows without forwarding when no fallback is configured", async () => {
-    const target = testEnv({ DB: failingDb });
-    delete target.env.FALLBACK_FORWARD_TO;
-    await expect(deliver(plain, { env: target })).rejects.toThrow(
-      "D1 unavailable",
-    );
-  });
-
-  it("refuses a fallback on the recipient's own domain", async () => {
-    const target = testEnv({
-      DB: failingDb,
-      FALLBACK_FORWARD_TO: "suporte@survivus.com.br",
-    });
-    await expect(deliver(plain, { env: target })).rejects.toThrow(
-      "D1 unavailable",
-    );
   });
 });
