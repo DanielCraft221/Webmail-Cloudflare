@@ -68,7 +68,7 @@ Fontes: [Limits](https://developers.cloudflare.com/queues/platform/limits/), [Ba
 | Retenção | Configurável até 14 dias no plano pago (24 h fixas no Free) |
 | `max_retries` | Padrão 3, máximo 100. Este projeto usa 10 |
 | CPU do consumidor | 30 s por padrão, até 5 min com `limits.cpu_ms`. Tempo total: 15 min |
-| DLQ sem consumidor | As mensagens ficam **4 dias** e depois são apagadas |
+| DLQ sem consumidor | As mensagens ficam pela retenção da fila (padrão **4 dias**) e depois são apagadas. As filas deste projeto foram criadas com 14 dias |
 
 - Se o `queue()` lança exceção, o lote inteiro volta, menos as mensagens já confirmadas com `ack()`. `msg.retry({ delaySeconds })` devolve uma mensagem com espera.
 - Não existe espera crescente automática. O código calcula a partir de `msg.attempts`: 30 s, dobrando, até 1 h.
@@ -93,3 +93,4 @@ O total de metadados de um objeto é de 8.192 bytes ([R2 limits](https://develop
 3. **Memória:** mensagem perto de 25 MiB com anexo.
 4. **`forward()` depois de ler o `raw`:** não documentado, e é a ordem em que o encaminhamento de reserva acontece. Testar forçando uma falha do R2 num Worker de teste.
 5. **`Authentication-Results` forjado com o `authserv-id` da Cloudflare:** confirmar se a Cloudflare remove ou renomeia esse cabeçalho quando ele já vem na mensagem (RFC 8601, seção 5). Só depois disso preencher `TRUSTED_AUTHSERV_IDS`.
+6. **Workers Logs sem o remetente completo:** depois da primeira mensagem real, conferir no painel que nenhuma entrada guardada tem o `mailFrom` (os *invocation logs* estão desligados no `wrangler.jsonc`).
