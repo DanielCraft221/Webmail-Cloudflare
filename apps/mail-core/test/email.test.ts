@@ -95,8 +95,9 @@ describe("email handler and consumer: storing", () => {
       envelopeTo: "compras@survivus.com.br",
       envelopeFrom: "bounce+x@example.net",
       receivedAt: job?.receivedAt,
-      dedupeKey: "<plain-0001@example.net>",
+      dedupeKey: job?.dedupeKey,
     });
+    expect(job?.dedupeKey).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
   it("stores an HTML message with an attachment under a UUID key", async () => {
@@ -121,13 +122,40 @@ describe("email handler and consumer: storing", () => {
     expect(object?.size).toBe(attachment?.size);
   });
 
-  it("keeps one row when the same Message-ID arrives twice", async () => {
-    await deliverAndIngest(plain);
+  it("stores a real duplicate under dup/ with the same metadata, without queueing", async () => {
+    const first = await deliverAndIngest(plain);
     const second = await deliver(plain);
     expect(second.jobs).toEqual([]);
     expect(second.setReject).not.toHaveBeenCalled();
     expect(await messages()).toHaveLength(1);
     expect(await r2Keys("raw/")).toHaveLength(1);
+
+    const [dupKey] = await r2Keys("dup/");
+    expect(dupKey).toMatch(new RegExp(`^dup/\\d{4}/\\d{2}/${UUID}\\.eml$`));
+    const dup = await env.MAIL.get(String(dupKey));
+    expect(await dup?.text()).toBe(plain);
+    expect(dup?.customMetadata).toMatchObject({
+      mailboxId: String(await mailboxId("contato@survivus.com.br")),
+      envelopeTo: "contato@survivus.com.br",
+      dedupeKey: first.jobs[0]?.dedupeKey,
+    });
+  });
+
+  it("treats the same Message-ID with a different subject as a new message", async () => {
+    await deliverAndIngest(plain);
+    await deliverAndIngest(
+      plain.replace(
+        "Subject: Orcamento sigiloso 4471",
+        "Subject: Outro assunto",
+      ),
+    );
+    const rows = await messages();
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.message_id)).toEqual([
+      "<plain-0001@example.net>",
+      "<plain-0001@example.net>",
+    ]);
+    expect(await r2Keys("dup/")).toEqual([]);
   });
 
   it("deduplicates a message without Message-ID by its hash", async () => {
@@ -140,6 +168,7 @@ describe("email handler and consumer: storing", () => {
     });
     expect(second.jobs).toEqual([]);
     expect(await messages()).toHaveLength(1);
+    expect(await r2Keys("dup/")).toHaveLength(1);
   });
 
   it("records broken MIME as parse_status failed and keeps the .eml", async () => {

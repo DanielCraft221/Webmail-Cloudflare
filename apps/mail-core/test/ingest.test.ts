@@ -61,6 +61,8 @@ describe("queue consumer: failures and retries", () => {
     expect(await ingest(second, env)).toBe("duplicate");
     expect(await messages()).toHaveLength(1);
     expect(await env.MAIL.head(second.rawKey)).toBeNull();
+    const dup = await env.MAIL.head(second.rawKey.replace(/^raw\//, "dup/"));
+    expect(dup?.customMetadata?.dedupeKey).toBe(second.dedupeKey);
     expect(await r2Keys("body/")).toEqual([`body/${first.id}.json`]);
   });
 

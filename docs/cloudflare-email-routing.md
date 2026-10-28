@@ -77,7 +77,7 @@ Fontes: [Limits](https://developers.cloudflare.com/queues/platform/limits/), [Ba
 
 ## Metadados do R2
 
-O total de metadados de um objeto é de 8.192 bytes ([R2 limits](https://developers.cloudflare.com/r2/platform/limits/)). O `customMetadata` do `.eml` cabe com folga, porque o `Message-ID` com mais de 200 caracteres vira um hash. A documentação não diz se aceita caracteres fora do ASCII (endereços SMTPUTF8): se a gravação falhar, o handler encaminha para o endereço de reserva.
+O total de metadados de um objeto é de 8.192 bytes ([R2 limits](https://developers.cloudflare.com/r2/platform/limits/)). O `customMetadata` do `.eml` cabe com folga, porque a chave de deduplicação é sempre um hash SHA-256. A documentação não diz se aceita caracteres fora do ASCII (endereços SMTPUTF8): se a gravação falhar, o handler encaminha para o endereço de reserva.
 
 ## Testes com Vitest
 

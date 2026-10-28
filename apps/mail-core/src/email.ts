@@ -4,8 +4,8 @@ import { domainOf, errorName, type LogEntry, log } from "./log";
 
 /** Same limit Email Routing enforces on inbound mail (docs/cloudflare-email-routing.md). */
 export const MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
-/** Longer Message-IDs are hashed, keeping the key small for the index and R2 metadata. */
-const MAX_MESSAGE_ID_LENGTH = 200;
+/** Headers that, with the Message-ID, identify the same message (see docs/decisoes.md). */
+const DEDUPE_HEADERS = ["from", "date", "subject", "to"] as const;
 
 /**
  * Accepts or rejects the message, then stores the raw .eml and queues it for parsing.
@@ -46,19 +46,10 @@ export async function handleEmail(
   try {
     // The raw stream can be read only once.
     const raw = await new Response(message.raw).arrayBuffer();
-    const dedupeKey = await dedupeKeyFor(
-      message.headers.get("Message-ID"),
-      raw,
-    );
-
-    if (await isDuplicate(env.DB, mailboxId, dedupeKey)) {
-      log({ ...context, event: "duplicate", status: "skipped" });
-      return;
-    }
-
-    const rawKey = `raw/${receivedAt.slice(0, 4)}/${receivedAt.slice(5, 7)}/${id}.eml`;
+    const dedupeKey = await dedupeKeyFor(message.headers, raw);
+    const month = `${receivedAt.slice(0, 4)}/${receivedAt.slice(5, 7)}`;
     // The metadata alone is enough to reprocess the object: a Bcc recipient is not in the headers.
-    await env.MAIL.put(rawKey, raw, {
+    const options: R2PutOptions = {
       httpMetadata: { contentType: "message/rfc822" },
       customMetadata: {
         mailboxId: String(mailboxId),
@@ -67,7 +58,23 @@ export async function handleEmail(
         receivedAt,
         dedupeKey,
       },
-    });
+    };
+
+    if (await isDuplicate(env.DB, mailboxId, dedupeKey)) {
+      // Kept, never discarded: a wrong dedupe decision must not lose mail.
+      await env.MAIL.put(`dup/${month}/${id}.eml`, raw, options);
+      log({
+        ...context,
+        event: "duplicate",
+        messageId: id,
+        status: "stored_as_duplicate",
+        dedupeKey,
+      });
+      return;
+    }
+
+    const rawKey = `raw/${month}/${id}.eml`;
+    await env.MAIL.put(rawKey, raw, options);
 
     const job: IngestJob = {
       id,
@@ -111,20 +118,32 @@ async function isDuplicate(
 ): Promise<boolean> {
   const row = await db
     .prepare(
-      "SELECT 1 AS found FROM messages WHERE mailbox_id = ?1 AND message_id = ?2",
+      "SELECT 1 AS found FROM messages WHERE mailbox_id = ?1 AND dedupe_key = ?2",
     )
     .bind(mailboxId, dedupeKey)
     .first();
   return row !== null;
 }
 
+/**
+ * Same Message-ID with different From, Date, Subject or To is a new message, so senders with
+ * sequential or reused IDs cannot make mail disappear. Without a Message-ID, only identical bytes match.
+ */
 export async function dedupeKeyFor(
-  header: string | null,
+  headers: Headers,
   raw: ArrayBuffer,
 ): Promise<string> {
-  const messageId = header?.trim();
-  if (messageId && messageId.length <= MAX_MESSAGE_ID_LENGTH) return messageId;
-  return `sha256:${await sha256Hex(messageId || raw)}`;
+  const messageId = normalizeHeader(headers.get("message-id"));
+  if (!messageId) return `sha256:${await sha256Hex(raw)}`;
+  const fields = [
+    messageId,
+    ...DEDUPE_HEADERS.map((name) => normalizeHeader(headers.get(name))),
+  ];
+  return `sha256:${await sha256Hex(JSON.stringify(fields))}`;
+}
+
+function normalizeHeader(value: string | null): string {
+  return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
 /**

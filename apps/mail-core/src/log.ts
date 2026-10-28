@@ -8,6 +8,8 @@ export type LogEntry = {
   status?: string;
   attempt?: number;
   error?: string;
+  /** SHA-256 dedupe key: a hash, never the headers it was computed from. */
+  dedupeKey?: string;
 };
 
 export function log(entry: LogEntry): void {

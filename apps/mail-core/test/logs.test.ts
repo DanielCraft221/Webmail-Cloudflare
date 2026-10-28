@@ -49,4 +49,32 @@ describe("logs", () => {
       expect(logged).not.toContain(secret);
     }
   });
+
+  it("logs a duplicate with only its UUID and the dedupe key hash", async () => {
+    await deliverAndIngest(plain);
+    const output = captureLogs();
+    await deliver(plain);
+
+    const entries = output()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const duplicate = entries.find((e) => e.event === "duplicate");
+    expect(duplicate).toEqual({
+      event: "duplicate",
+      mailbox: "contato@survivus.com.br",
+      senderDomain: "example.net",
+      size: plain.length,
+      messageId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      status: "stored_as_duplicate",
+      dedupeKey: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+    });
+    for (const secret of [
+      "Orcamento sigiloso",
+      "Corpo de teste",
+      "ana.teste@example.net",
+      "plain-0001",
+    ]) {
+      expect(output()).not.toContain(secret);
+    }
+  });
 });

@@ -42,11 +42,14 @@ export function fakeEmail(
   } = {},
 ) {
   const bytes = new TextEncoder().encode(raw);
+  // Like Email Routing: every header of the message, unfolded.
   const headers = new Headers();
-  const messageId = /^message-id:\s*(.+)$/im.exec(
-    raw.split(/\n\r?\n/)[0] ?? "",
-  )?.[1];
-  if (messageId) headers.set("Message-ID", messageId.trim());
+  const head = raw.split(/\r?\n\r?\n/)[0] ?? "";
+  for (const line of head.replace(/\r?\n[ \t]+/g, " ").split(/\r?\n/)) {
+    const colon = line.indexOf(":");
+    if (colon > 0)
+      headers.append(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
+  }
   const setReject = vi.fn();
   const forward = vi.fn(async () => {
     if (options.forwardFails) throw new Error("Forward failed");

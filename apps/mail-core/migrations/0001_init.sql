@@ -20,8 +20,9 @@ CREATE TABLE messages (
   mailbox_id INTEGER NOT NULL REFERENCES mailboxes (id),
   folder TEXT NOT NULL DEFAULT 'inbox'
     CHECK (folder IN ('inbox', 'spam', 'trash', 'archive', 'sent')),
-  -- Message-ID header, or "sha256:<hex>" of the raw message when the header is missing.
-  message_id TEXT NOT NULL,
+  message_id TEXT,
+  -- "sha256:<hex>" of Message-ID + From, Date, Subject, To; of the raw bytes without a Message-ID.
+  dedupe_key TEXT NOT NULL,
   in_reply_to TEXT,
   references_ids TEXT,
   from_address TEXT,
@@ -43,7 +44,7 @@ CREATE TABLE messages (
   parse_status TEXT NOT NULL CHECK (parse_status IN ('ok', 'failed'))
 );
 
-CREATE UNIQUE INDEX messages_mailbox_message_id ON messages (mailbox_id, message_id);
+CREATE UNIQUE INDEX messages_mailbox_dedupe_key ON messages (mailbox_id, dedupe_key);
 CREATE INDEX messages_listing ON messages (mailbox_id, folder, received_at DESC);
 
 CREATE TABLE attachments (
