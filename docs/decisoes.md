@@ -121,22 +121,43 @@ Registro curto das decisões já tomadas e seus motivos. Mudanças de arquitetur
 
 ## Fila entre o recebimento e o processamento
 
-**Decisão:** o handler `email` só valida, deduplica, grava o `.eml` no R2 e manda a chave para a fila `mail-ingest` (Cloudflare Queues). Um consumidor da fila faz o parse, grava os anexos e o D1, com retries e a dead letter queue `mail-ingest-dlq`. Se o R2, a fila ou o D1 falharem no handler, ele encaminha a mensagem com `forward()` para um endereço de reserva verificado (`FALLBACK_FORWARD_TO`, guardado como secret), e nunca usa `setReject`.
+**Decisão:** o handler `email` só valida, deduplica, grava o `.eml` no R2 e manda a chave para a fila `mail-ingest` (Cloudflare Queues). Um consumidor da fila faz o parse, grava os anexos e o D1, com retries e a dead letter queue `mail-ingest-dlq`. Se o R2, a fila ou o D1 falharem no handler, ele lança a exceção, que vira falha temporária (veja a decisão seguinte), e nunca usa `setReject`.
 
-**Motivo:** a Cloudflare não documenta o que o remetente recebe quando o handler lança uma exceção, e a API não tem "falha temporária" (veja `cloudflare-email-routing.md`). Com a fila, o handler faz o mínimo: o trabalho que pode falhar por mais tempo (D1, parse) ganha retries automáticos sem depender do remetente tentar de novo.
+**Motivo:** com a fila, o handler faz o mínimo: o trabalho que pode falhar por mais tempo (D1, parse) ganha retries automáticos sem depender do remetente tentar de novo.
 
 **Limitações aceitas:**
 
 - Uma mensagem que esgota os retries fica na DLQ por 14 dias (retenção configurada na criação das filas; o padrão seria 4). O `.eml` continua no R2, com os metadados do envelope no `customMetadata`, mas para reaparecer no webmail precisa de uma ferramenta de reprocessamento (em "Depois" no `progresso.md`).
-- O endereço de reserva fica como secret, e não em `vars`, porque é um e-mail pessoal e o repositório é público. O código recusa um endereço no próprio domínio do destinatário, para não criar um loop.
+- Se a fila falha depois da gravação no R2, o `.eml` fica em `raw/` sem linha no D1, e a nova tentativa do remetente grava outra cópia. O reprocessamento (em "Depois") precisa tratar essa cópia como duplicata pela `dedupeKey`.
+
+## Exceção no handler é falha temporária: sem encaminhamento de reserva
+
+**Decisão:** em falha do R2, da fila ou do D1, o handler `email` registra `internal_error` e relança a exceção. O encaminhamento com `forward()` para um endereço de reserva e o secret `FALLBACK_FORWARD_TO` foram removidos em 2026-10-28.
+
+**Evidência (teste 5 do PR 2, 2026-10-28):** um Worker descartável (`mail-test-scratch`) que sempre lançava exceção recebeu uma mensagem do Gmail num endereço de teste.
+
+- O Registro de atividade do Email Routing mostrou 7 tentativas da mesma mensagem (mesmo `Message-ID`) entre 17:59 e 22:00 UTC, com intervalos crescentes, que é o padrão de reenvio do Gmail.
+- O motivo registrado em cada tentativa foi: "upstream (worker:mail-test-scratch) temporary error: worker script threw an exception".
+- O `wrangler tail` mostrou `outcome: exception` em cada entrega, e o remetente não recebeu nenhum aviso de falha durante as tentativas.
+
+**Motivo:** a documentação da Cloudflare não dizia o que acontecia com uma exceção, e o encaminhamento de reserva existia para o caso de a mensagem se perder. O teste mostrou que a Cloudflare responde ao remetente com erro temporário e o servidor dele tenta de novo, então nada se perde. Sem o encaminhamento, a mensagem nunca sai do nosso controle para uma caixa pessoal, e não há secret nem endereço verificado para manter.
+
+**Limitações aceitas:**
+
+- Quanto tempo o remetente insiste depende do servidor dele (a RFC 5321 recomenda pelo menos 4 a 5 dias). Uma falha mais longa que isso faz o servidor do remetente devolver a mensagem para ele, com aviso. A mensagem não some em silêncio.
+- Enquanto a falha dura, a mensagem atrasa.
+
+**Regra geral:** se algum encaminhamento voltar a ser usado, o destino nunca pode estar num domínio atendido pelo `mail-core`, senão a mensagem volta para o próprio Worker.
 
 ## Só o `Authentication-Results` do topo, e só de `authserv-id` confiável
 
-**Decisão:** o resultado de SPF, DKIM e DMARC vem só do primeiro `Authentication-Results` da mensagem, e só se o `authserv-id` dele estiver em `TRUSTED_AUTHSERV_IDS`. A lista começa vazia: até o PR 2 confirmar o valor real, tudo fica `unknown`.
+**Decisão:** o resultado de SPF, DKIM e DMARC vem só do primeiro `Authentication-Results` da mensagem, e só se o `authserv-id` dele estiver em `TRUSTED_AUTHSERV_IDS`. A lista tem `mx.cloudflare.net`, confirmado numa mensagem real no PR 2 (teste 3). No SPF, vale o resultado com `smtp.mailfrom`: a Cloudflare escreve dois, um para o HELO (`smtp.helo`, que costuma dar `none`) e outro para o remetente do envelope, que é o que o DMARC usa. Sem `smtp.mailfrom`, vale o primeiro.
 
-**Motivo:** qualquer remetente pode incluir um `Authentication-Results: ...; dmarc=pass` falso. Um cabeçalho de outro servidor não prova nada.
+**Motivo:** qualquer remetente pode incluir um `Authentication-Results: ...; dmarc=pass` falso. Um cabeçalho de outro servidor não prova nada. Na mensagem real, o cabeçalho da Cloudflare foi o primeiro, logo abaixo do `Received` dela, então um cabeçalho forjado fica abaixo e é ignorado.
 
-**Pendente (PR 2):** confirmar que a Cloudflare remove ou renomeia um `Authentication-Results` que chega com o `authserv-id` dela (RFC 8601, seção 5). Se não remover, um atacante consegue forjar o id quando a Cloudflare não acrescenta o próprio cabeçalho.
+**Não testado:** se a Cloudflare remove ou renomeia um `Authentication-Results` que já chega com o `authserv-id` dela (RFC 8601, seção 5). Pelo Gmail não dá para testar. O risco existe só se a Cloudflare deixar de acrescentar o próprio cabeçalho: aí o forjado ficaria no topo. Hoje o efeito de um resultado errado é só a pasta (DMARC `fail` vai para `spam`).
+
+**Antes de qualquer selo de "remetente verificado" na interface (Etapa 6):** reforçar a checagem. Por exemplo: exigir que o `Authentication-Results` confiável venha logo depois do `Received` da Cloudflare, ou conferir o `ARC-Seal` assinado por `cloudflare-email.net`. Um selo faz o usuário confiar no remetente, então um cabeçalho forjado passaria a ter um efeito muito maior.
 
 ## Scripts de instalação do `esbuild` e do `workerd` bloqueados
 

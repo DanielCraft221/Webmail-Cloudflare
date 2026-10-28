@@ -11,7 +11,7 @@ Sem IMAP, sem POP3, sem servidor SMTP próprio.
 ```
 Internet ──MX──> Cloudflare Email Routing ──> Worker "mail-core" (apps/mail-core)
                                                 ├─ email(): valida, deduplica, grava .eml no R2, envia a chave para a fila
-                                                │     └─ falha no R2, na fila ou no D1: forward() para endereço de reserva (nunca setReject)
+                                                │     └─ falha no R2, na fila ou no D1: exceção = erro temporário, o remetente tenta de novo (nunca setReject)
                                                 ├─ Queue "mail-ingest" ──> queue(): parse, anexos no R2, metadados no D1
                                                 │     └─ retries com espera crescente; esgotados: DLQ "mail-ingest-dlq"
                                                 ├─ R2: .eml bruto, corpo parseado, anexos

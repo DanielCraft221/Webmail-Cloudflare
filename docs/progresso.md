@@ -16,18 +16,21 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 - PR 1 mergeado (com o complemento da deduplicação em `etapa-2/dedupe`).
 - Token do Wrangler criado (Account API Token, sem permissões de zona, expira em 2026-11-30). `wrangler whoami` funcionando.
 - Criados na Cloudflare: D1 `webmail-db` (`enam`), R2 `webmail-mail` (`enam`, `r2.dev` desligado), filas `mail-ingest` e `mail-ingest-dlq` (retenção de 14 dias).
-- Branch `etapa-2/deploy-config`: `database_id` real, `observability` ligado, `docs/cloudflare.md`.
+- PR 2a (`etapa-2/deploy-config`) mergeado: `database_id` real, `observability` ligado, `docs/cloudflare.md`.
+- Na `main`: migração e seed remotos, deploy do `mail-core`, Email Routing e catch-all pelo painel.
+- Testes reais (resultados em `docs/cloudflare-email-routing.md`): anexo de 2,14 MB, endereço inexistente, `authserv-id` (`mx.cloudflare.net`), `forward()` depois do `raw`, exceção no handler (falha temporária, Worker descartável `mail-test-scratch`).
+- Branch `etapa-2/deploy-ajustes`: exceção no lugar do encaminhamento de reserva (sem `FALLBACK_FORWARD_TO`), `TRUSTED_AUTHSERV_IDS = ["mx.cloudflare.net"]`, SPF pelo `smtp.mailfrom`.
 
 ### Falta
 
-- Merge do PR `etapa-2/deploy-config`.
-- A partir da `main`: migração e seed remotos, deploy, secret `FALLBACK_FORWARD_TO`, endereço de reserva verificado, DNS atual, Email Routing e catch-all pelo painel.
-- Testes reais: Gmail com anexo para `contato@`, endereço inexistente, `authserv-id` real, `forward()` depois de ler o `raw`, exceção no handler (Worker descartável). Também `inbox:list`.
-- Branch `etapa-2/deploy-ajustes` com o `authserv-id` e as correções dos testes, e novo deploy.
+- Limpeza: regras `teste-forward@` e `teste-excecao@` no painel, `wrangler delete mail-test-scratch`, `wrangler secret delete FALLBACK_FORWARD_TO` no `mail-core`.
+- PR `etapa-2/deploy-ajustes`, merge e novo deploy a partir da `main`.
+- Conferir no painel que o Workers Logs não guarda o `mailFrom`.
+- `inbox:list` (tarefa 8 da Etapa 2) e teste de memória perto de 25 MiB.
 
 ### Próximo passo
 
-Depois do merge do `etapa-2/deploy-config`: na `main`, `git pull --ff-only` e mostrar o comando da migração remota.
+Fazer a limpeza acima e abrir o PR do `etapa-2/deploy-ajustes`. Depois do merge: `git pull --ff-only` na `main` e mostrar o comando do deploy.
 
 
 ## Etapa 1: concluída (2026-10-27)

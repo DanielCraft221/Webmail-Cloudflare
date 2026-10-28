@@ -70,34 +70,19 @@ pnpm exec wrangler d1 execute webmail-db --remote --file seed/0001_survivus.sql
 
 As migrações aplicadas ficam registradas na tabela `d1_migrations`. O seed usa `INSERT OR IGNORE`, então pode ser rodado de novo sem duplicar.
 
-## 4. Deploy e endereço de reserva
+## 4. Deploy
 
 ```bash
 pnpm exec wrangler deploy
 ```
 
-O deploy sai sempre da `main` atualizada, nunca de um branch sem revisão.
-
-Depois do primeiro deploy, configure o secret do endereço de reserva. Rode você mesmo, porque o comando pede o valor no terminal e ele nunca deve aparecer no chat:
-
-```bash
-pnpm exec wrangler secret put FALLBACK_FORWARD_TO
-```
-
-O endereço precisa ser um **destino verificado** no Email Routing (seção 5.1) e não pode ser de `survivus.com.br`, senão o encaminhamento voltaria para o próprio Worker.
+O deploy sai sempre da `main` atualizada, nunca de um branch sem revisão. O `mail-core` não tem secrets por enquanto.
 
 ## 5. Email Routing pelo painel
 
 O token não tem permissões de zona, então estes passos são feitos à mão no painel da Cloudflare.
 
-### 5.1 Verificar o endereço de reserva
-
-1. Abra **Compute** › **Email Service** › **Email Routing** › **Destination Addresses**.
-2. Em **Destination addresses**, digite o endereço de reserva e envie.
-3. Abra o e-mail de verificação que a Cloudflare manda e clique em **Verify email address**.
-4. Confira se o endereço aparece como verificado. Enquanto ele está pendente, o `forward()` para ele falha.
-
-### 5.2 Antes de ativar: conferir o DNS atual
+### 5.1 Antes de ativar: conferir o DNS atual
 
 ```bash
 dig +short MX survivus.com.br
@@ -106,15 +91,15 @@ dig +short TXT survivus.com.br
 
 O domínio só pode ter **um** registro SPF (`v=spf1 ...`). Se já existir um, pare e decida antes de continuar. Anote os MX atuais: são eles que voltam se o Email Routing for desligado.
 
-### 5.3 Ativar o Email Routing
+### 5.2 Ativar o Email Routing
 
 1. Abra **Compute** › **Email Service** › **Email Routing**.
 2. Clique em **Onboard Domain** e escolha `survivus.com.br`.
 3. Revise os registros DNS que serão criados: MX para a Cloudflare, TXT de SPF e TXT de DKIM.
 4. Clique em **Done**.
-5. Confira de novo com `dig` (seção 5.2). A propagação costuma levar de 5 a 15 minutos.
+5. Confira de novo com `dig` (seção 5.1). A propagação costuma levar de 5 a 15 minutos.
 
-### 5.4 Catch-all para o Worker
+### 5.3 Catch-all para o Worker
 
 O Worker `mail-core` precisa estar publicado (seção 4) para aparecer na lista.
 
@@ -125,7 +110,7 @@ O Worker `mail-core` precisa estar publicado (seção 4) para aparecer na lista.
 
 Não crie regras por endereço: quem decide se um endereço existe é o D1 (`docs/decisoes.md`).
 
-**Para desfazer:** desligue o catch-all na mesma tela. Se desligar o Email Routing do domínio, confira o DNS depois com `dig` e compare com o que foi anotado na seção 5.2.
+**Para desfazer:** desligue o catch-all na mesma tela. Se desligar o Email Routing do domínio, confira o DNS depois com `dig` e compare com o que foi anotado na seção 5.1.
 
 ## 6. Logs
 

@@ -37,9 +37,8 @@ Visão geral no [`README.md`](../README.md). Este documento descreve os fluxos e
 | Falha | Comportamento |
 | ----- | ------------- |
 | Destinatário inexistente ou mensagem grande demais | `setReject`: o remetente recebe o erro na hora |
-| D1, R2 ou fila falham no handler | `forward()` para o endereço de reserva (`FALLBACK_FORWARD_TO`). **Nunca `setReject`** |
-| O `forward()` também falha, ou não há endereço de reserva | O handler relança a exceção. O efeito real para o remetente é medido no PR 2 |
-| A fila falha depois de gravar no R2 | A mensagem é encaminhada, e o `.eml` fica no R2 com os metadados |
+| D1, R2 ou fila falham no handler | O handler lança a exceção. A Cloudflare responde ao remetente com **erro temporário**, e o servidor dele tenta de novo (medido no PR 2). **Nunca `setReject`** |
+| A fila falha depois de gravar no R2 | Erro temporário, como acima. O `.eml` dessa tentativa fica no R2 sem linha no D1 |
 | Parse falha (MIME quebrado) | A mensagem é registrada com `parse_status = 'failed'`, o assunto lido direto dos cabeçalhos e o `.eml` guardado |
 | D1 ou R2 falham no consumidor | `retry` com espera de 30 s, dobrando até 1 h, por até 10 tentativas (cerca de 4 h). Depois vai para a DLQ `mail-ingest-dlq` |
 | Mensagem na DLQ | Fica lá por 14 dias (sem consumidor). O `.eml` continua no R2 para sempre. Reprocessamento: em "Depois" no `progresso.md` |
@@ -48,11 +47,11 @@ Visão geral no [`README.md`](../README.md). Este documento descreve os fluxos e
 
 ### Autenticação (SPF, DKIM, DMARC)
 
-O remetente pode colocar um `Authentication-Results` falso na mensagem. Por isso só vale o cabeçalho **do topo**, e só se o `authserv-id` dele estiver na lista `TRUSTED_AUTHSERV_IDS` (`apps/mail-core/src/auth-results.ts`). A lista está vazia até o PR 2 confirmar o valor real da Cloudflare: até lá, tudo fica `unknown` e nada vai para `spam` por DMARC.
+O remetente pode colocar um `Authentication-Results` falso na mensagem. Por isso só vale o cabeçalho **do topo**, e só se o `authserv-id` dele estiver na lista `TRUSTED_AUTHSERV_IDS` (`apps/mail-core/src/auth-results.ts`), que tem `mx.cloudflare.net`. No SPF, vale o resultado do remetente do envelope (`smtp.mailfrom`), não o do HELO.
 
 ### Logs
 
-Só o UUID da mensagem, a caixa, o domínio do remetente, o tamanho, o status, o nome do erro e, nas duplicatas, o hash da chave de deduplicação. Nunca assunto, corpo, nome de anexo, endereço completo do remetente nem o endereço de reserva.
+Só o UUID da mensagem, a caixa, o domínio do remetente, o tamanho, o status, o nome do erro e, nas duplicatas, o hash da chave de deduplicação. Nunca assunto, corpo, nome de anexo nem endereço completo do remetente.
 
 ### Por que o servidor doméstico não fica no caminho de recebimento
 
