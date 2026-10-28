@@ -59,7 +59,7 @@ O `message` é um `ForwardableEmailMessage`:
 
 Esperar o R2 ou o D1 não conta como CPU. O parse de uma mensagem grande conta.
 
-**Memória:** uma mensagem de 25 MiB fica no buffer, e o `postal-mime` cria cópias decodificadas dos anexos. O total pode passar de 70 MB, perto do limite de 128 MB. O código descarta referências cedo, e o PR 2 mede com um anexo grande.
+**Memória:** uma mensagem de 25 MiB fica no buffer, e o `postal-mime` cria cópias decodificadas dos anexos. O total pode passar de 70 MB, perto do limite de 128 MB. O código descarta referências cedo. Medido no PR 2: veja "Testes reais".
 
 ## Wrangler, D1 e R2
 
@@ -106,9 +106,13 @@ O total de metadados de um objeto é de 8.192 bytes ([R2 limits](https://develop
 | `authserv-id` real | `mx.cloudflare.net` (formato acima). Achado: dois resultados de SPF, corrigido no código |
 | `forward()` depois de ler o `raw` | Funcionou (Worker descartável). O encaminhamento de reserva foi removido depois, então isso não é mais usado |
 | Exceção no handler | Falha temporária, o remetente tenta de novo (acima e em `decisoes.md`) |
+| Autenticação depois do deploy do PR 2b | Mensagem do Gmail com `spf`, `dkim` e `dmarc` = `pass` no D1 |
+| Memória: `.eml` de 16.740.588 bytes (16,7 MB), anexo `video/mp4` de 12.227.425 bytes | Passou: consumidor na 1ª tentativa, sem erro, tamanhos iguais no R2 e no D1 |
+| Memória, pior caso: `.eml` de 25.956.255 bytes (24,75 MiB, perto do limite de 25 MiB), anexo `video/mp4` de 18.962.423 bytes | Passou: consumidor na 1ª tentativa, sem "Exceeded Memory Limit" nem outro erro, tamanhos iguais no R2 e no D1 |
+
+**Ressalva dos testes de memória:** o `wrangler tail` não mostra quanta memória o Worker usou. Os testes provam que essas mensagens couberam no limite de 128 MB, não a folga que sobrou.
 
 Pendentes:
 
-1. **Memória:** depois do deploy, e-mail com anexo de 18 a 20 MB; conferir os logs do consumidor.
-2. **`Authentication-Results` forjado com o `authserv-id` da Cloudflare:** pelo Gmail não dá para testar se a Cloudflare remove ou renomeia esse cabeçalho (RFC 8601, seção 5). Veja o reforço previsto antes da Etapa 6 em `decisoes.md`.
-3. **Workers Logs sem o remetente completo:** conferir no painel que nenhuma entrada guardada tem o `mailFrom` (os *invocation logs* estão desligados no `wrangler.jsonc`).
+1. **`Authentication-Results` forjado com o `authserv-id` da Cloudflare:** pelo Gmail não dá para testar se a Cloudflare remove ou renomeia esse cabeçalho (RFC 8601, seção 5). Veja o reforço previsto antes da Etapa 6 em `decisoes.md`.
+2. **Workers Logs sem o remetente completo:** conferir no painel que nenhuma entrada guardada tem o `mailFrom` (os *invocation logs* estão desligados no `wrangler.jsonc`).

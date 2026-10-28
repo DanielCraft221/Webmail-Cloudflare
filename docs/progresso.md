@@ -2,7 +2,17 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 2 (em andamento)
+## Etapa atual: 3 (não iniciada)
+
+### Próximo passo
+
+Colocar o `docs/etapas/etapa-3.md` na pasta (ainda não existe), commitar num branch, ler e apresentar o plano curto da Etapa 3 e esperar aprovação.
+
+### Avisos para a Etapa 3
+
+- Anexos servidos pela API sempre com `Content-Disposition: attachment` e `X-Content-Type-Options: nosniff`, para o navegador nunca abrir um anexo (HTML, SVG) como página do nosso domínio.
+
+## Etapa 2: concluída (2026-10-28)
 
 ### Feito (2026-10-27)
 
@@ -21,17 +31,13 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 - Testes reais (resultados em `docs/cloudflare-email-routing.md`): anexo de 2,14 MB, endereço inexistente, `authserv-id` (`mx.cloudflare.net`), `forward()` depois do `raw`, exceção no handler (falha temporária, Worker descartável `mail-test-scratch`).
 - Branch `etapa-2/deploy-ajustes`: exceção no lugar do encaminhamento de reserva (sem `FALLBACK_FORWARD_TO`), `TRUSTED_AUTHSERV_IDS = ["mx.cloudflare.net"]`, SPF pelo `smtp.mailfrom`, script `inbox:list`.
 - Limpeza: regras de teste e Worker `mail-test-scratch` apagados pelo painel, secret `FALLBACK_FORWARD_TO` apagado, arquivos locais do teste apagados.
+- Na `main`: PR 2b mergeado e deploy (versão `12e4e188`). Mensagem real com `spf`, `dkim` e `dmarc` = `pass`.
+- Testes de memória: `.eml` de 16,7 MB e, no pior caso, de 24,75 MiB. Os dois processados na 1ª tentativa, sem erro, tamanhos iguais no R2 e no D1 (`docs/cloudflare-email-routing.md`).
+- Branch `etapa-2/fechamento`: registro dos testes de memória e fechamento da etapa.
 
 ### Falta
 
-- Merge do PR `etapa-2/deploy-ajustes` e novo deploy a partir da `main`.
-- Teste de memória depois do deploy: e-mail com anexo de 18 a 20 MB, conferir os logs do consumidor.
-- Conferir no painel que o Workers Logs não guarda o `mailFrom`.
-
-### Próximo passo
-
-Depois do merge do `etapa-2/deploy-ajustes`: `git pull --ff-only` na `main` e mostrar o comando do deploy.
-
+- _(nada da Etapa 2)_. Verificações que continuam abertas, listadas em `docs/cloudflare-email-routing.md`: `Authentication-Results` forjado com o `authserv-id` da Cloudflare (não testável pelo Gmail) e conferir no painel que o Workers Logs não guarda o `mailFrom`.
 
 ## Etapa 1: concluída (2026-10-27)
 
@@ -68,6 +74,6 @@ Etapa 2. O `docs/etapas/etapa-2.md` já está na pasta, mas ainda não foi commi
 
 Ideias que ainda não entraram no roteiro.
 
-- Ferramenta de reprocessamento: reenviar para a fila os `.eml` do R2 que não têm linha no D1 (DLQ expirada após 14 dias), usando o `customMetadata` do objeto.
+- Ferramenta de reprocessamento da DLQ: reenviar para a fila os `.eml` do R2 que não têm linha no D1 (DLQ expirada após 14 dias), usando o `customMetadata` do objeto. Tratar como duplicata, pela `dedupeKey`, a cópia que fica em `raw/` quando a fila falha no handler.
 - Alerta quando chegar mensagem na DLQ `mail-ingest-dlq`.
 - Limpeza das duplicatas em `dup/` no R2 (hoje ficam para sempre). O reprocessamento acima deve ignorar `dup/`.
