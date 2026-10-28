@@ -19,18 +19,18 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 - PR 2a (`etapa-2/deploy-config`) mergeado: `database_id` real, `observability` ligado, `docs/cloudflare.md`.
 - Na `main`: migração e seed remotos, deploy do `mail-core`, Email Routing e catch-all pelo painel.
 - Testes reais (resultados em `docs/cloudflare-email-routing.md`): anexo de 2,14 MB, endereço inexistente, `authserv-id` (`mx.cloudflare.net`), `forward()` depois do `raw`, exceção no handler (falha temporária, Worker descartável `mail-test-scratch`).
-- Branch `etapa-2/deploy-ajustes`: exceção no lugar do encaminhamento de reserva (sem `FALLBACK_FORWARD_TO`), `TRUSTED_AUTHSERV_IDS = ["mx.cloudflare.net"]`, SPF pelo `smtp.mailfrom`.
+- Branch `etapa-2/deploy-ajustes`: exceção no lugar do encaminhamento de reserva (sem `FALLBACK_FORWARD_TO`), `TRUSTED_AUTHSERV_IDS = ["mx.cloudflare.net"]`, SPF pelo `smtp.mailfrom`, script `inbox:list`.
+- Limpeza: regras de teste e Worker `mail-test-scratch` apagados pelo painel, secret `FALLBACK_FORWARD_TO` apagado, arquivos locais do teste apagados.
 
 ### Falta
 
-- Limpeza: regras `teste-forward@` e `teste-excecao@` no painel, `wrangler delete mail-test-scratch`, `wrangler secret delete FALLBACK_FORWARD_TO` no `mail-core`.
-- PR `etapa-2/deploy-ajustes`, merge e novo deploy a partir da `main`.
+- Merge do PR `etapa-2/deploy-ajustes` e novo deploy a partir da `main`.
+- Teste de memória depois do deploy: e-mail com anexo de 18 a 20 MB, conferir os logs do consumidor.
 - Conferir no painel que o Workers Logs não guarda o `mailFrom`.
-- `inbox:list` (tarefa 8 da Etapa 2) e teste de memória perto de 25 MiB.
 
 ### Próximo passo
 
-Fazer a limpeza acima e abrir o PR do `etapa-2/deploy-ajustes`. Depois do merge: `git pull --ff-only` na `main` e mostrar o comando do deploy.
+Depois do merge do `etapa-2/deploy-ajustes`: `git pull --ff-only` na `main` e mostrar o comando do deploy.
 
 
 ## Etapa 1: concluída (2026-10-27)

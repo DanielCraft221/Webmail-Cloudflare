@@ -78,6 +78,10 @@ pnpm exec wrangler deploy
 
 O deploy sai sempre da `main` atualizada, nunca de um branch sem revisão. O `mail-core` não tem secrets por enquanto.
 
+### Workers descartáveis (testes)
+
+Um Worker de teste fora do repositório se apaga **pelo painel**, na página do Worker. O `wrangler delete` falha com este token: antes de apagar, ele tenta listar namespaces KV, e o token não tem permissão de KV. Apague antes as regras do Email Routing que apontam para ele.
+
 ## 5. Email Routing pelo painel
 
 O token não tem permissões de zona, então estes passos são feitos à mão no painel da Cloudflare.
@@ -112,7 +116,15 @@ Não crie regras por endereço: quem decide se um endereço existe é o D1 (`doc
 
 **Para desfazer:** desligue o catch-all na mesma tela. Se desligar o Email Routing do domínio, confira o DNS depois com `dig` e compare com o que foi anotado na seção 5.1.
 
-## 6. Logs
+## 6. Conferir as mensagens recebidas
+
+```bash
+pnpm --filter mail-core inbox:list
+```
+
+Lista as 20 últimas mensagens do D1 remoto: data, caixa, domínio do remetente, assunto, pasta e `parse_status`. Só lê (`SELECT`). Não mostra corpo nem o endereço completo do remetente.
+
+## 7. Logs
 
 O `wrangler.jsonc` liga o `observability`, então os logs do Worker ficam guardados no painel em **Workers Logs**. Só os nossos `log()` são guardados: têm o UUID da mensagem, a caixa, o domínio do remetente, o tamanho e o status.
 
