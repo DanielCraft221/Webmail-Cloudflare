@@ -7,11 +7,13 @@
   // behind Cloudflare Access (Etapa 3 PR 2).
   "workers_dev": false,
   "preview_urls": false,
-  // Workers Logs keeps only our log() entries, which never hold subject, body, attachment names
-  // or full sender. Invocation logs are off: an email event carries the full envelope sender (mailFrom).
+  // Workers Logs storage is off: the platform adds the full envelope sender (mailFrom), rcptTo
+  // and the full request URL to every log() line, with no way to exclude them (docs/decisoes.md).
+  // `wrangler tail` still shows logs live.
   "observability": {
-    "enabled": true,
+    "enabled": false,
     "logs": {
+      "enabled": false,
       "invocation_logs": false
     }
   },
