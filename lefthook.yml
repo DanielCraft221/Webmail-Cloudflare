@@ -16,6 +16,17 @@ pre-commit:
       # Fails closed: no gitleaks installed means no commit.
       run: gitleaks git --pre-commit --staged --redact --no-banner --verbose
 
+    - name: bidi
+      # Same check as CI, on the staged content: U+202A-U+202E and U+2066-U+2069 (Trojan Source).
+      run: |
+        status=0
+        LC_ALL=C git grep --cached -nP '\xE2\x80[\xAA-\xAE]|\xE2\x81[\xA6-\xA9]' || status=$?
+        if [ "$status" -eq 0 ]; then
+          printf '%s\n' 'Blocked: bidi control character staged (Trojan Source). Write it as a \u escape.'
+          exit 1
+        fi
+        [ "$status" -eq 1 ] # 1 = no match; anything else is a git grep error
+
     - name: biome
       glob: "*.{js,ts,mjs,cjs,json,jsonc,svelte,css}"
       run: pnpm exec biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
