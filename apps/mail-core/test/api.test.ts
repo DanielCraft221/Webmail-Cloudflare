@@ -288,6 +288,24 @@ describe("contentDisposition", () => {
     expect(contentDisposition(name, "anexo")).toBe(expected);
   });
 
+  // Trojan Source controls, built from code points so this file stays free of literal bidi characters.
+  it.each([
+    "202A",
+    "202B",
+    "202C",
+    "202D",
+    "202E",
+    "2066",
+    "2067",
+    "2068",
+    "2069",
+  ])("removes bidi control U+%s", (hex) => {
+    const name = `fatura${String.fromCodePoint(Number.parseInt(hex, 16))}fdp.exe`;
+    expect(contentDisposition(name, "anexo")).toBe(
+      `attachment; filename="faturafdp.exe"; filename*=UTF-8''faturafdp.exe`,
+    );
+  });
+
   it("caps the name at 200 characters without splitting one", () => {
     const header = contentDisposition("😀".repeat(300), "anexo");
     const encoded = header.split("UTF-8''")[1] ?? "";
