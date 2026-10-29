@@ -32,7 +32,7 @@ Fontes: [Service tokens](https://developers.cloudflare.com/cloudflare-one/identi
   - `iss` = `https://<equipe>.cloudflareaccess.com`;
   - `aud` = o AUD tag da aplicação;
   - `exp` e `nbf`, que a biblioteca `jose` confere sozinha.
-- **Payload de um Service Token:** `type` = `app`, `sub` vazio, `common_name` = o Client ID do token.
+- **Payload de um Service Token:** `type` = `app`, `sub` vazio, `common_name` = o Client ID do token. O exemplo não tem `nbf`: o código confere o `nbf` só quando ele vem, e exige o `exp`.
 - **Exemplo oficial para Workers:** usa a biblioteca `jose` (`createRemoteJWKSet` e `jwtVerify`, com `issuer` e `audience`).
 
 ## Binding de Rate Limiting
@@ -52,7 +52,7 @@ Fontes: [Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/b
   O `period` só aceita `10` ou `60` segundos. O `namespace_id` é um número único na conta.
 - **Uso:** `const { success } = await env.API_RATE_LIMIT.limit({ key: userId })`. A documentação recomenda chave estável (ID do usuário), não IP.
 - **Precisão:** o limite vale **por local da Cloudflare** e é aproximado: pode deixar passar um pouco acima do limite. Serve contra abuso, não como cota exata.
-- **Não documentado:** o comportamento local (Miniflare e testes). Conferir no PR 1.
+- **Comportamento local:** a documentação não fala dele. **Medido no PR 1:** nos testes (Miniflare), o binding real deixa passar 100 pedidos e o 101º recebe 429.
 
 ## Testar rotas HTTP com `@cloudflare/vitest-plugin`
 

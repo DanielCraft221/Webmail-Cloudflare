@@ -21,6 +21,8 @@ Atualize a cada segredo criado ou rotacionado. **Sem valores.**
 | Nome | Local | Quem usa | Permissões | Última rotação |
 | ---- | ----- | -------- | ---------- | -------------- |
 | Token do Wrangler (Account API Token) | `~/.config/cloudflare/wrangler.env` no servidor, `chmod 600`, fora do repositório | Wrangler neste servidor (deploy, D1, R2, filas, logs) | Workers Scripts Edit, D1 Edit, Workers R2 Storage Edit, Queues Edit, Workers Tail Read, User Details Read. Nenhuma permissão de zona | Criado em 2026-10-28, expira em 2026-11-30 |
+| `INTERNAL_API_TOKEN` | `wrangler secret` do `mail-core` e `~/.config/webmail/api.env` no servidor (`chmod 600`), base do `.env` do webmail na Etapa 7 | Webmail → API do `mail-core` (bearer) | Lê e altera as caixas permitidas a cada usuário, sempre com o Service Token junto | Criado no PR 2 da Etapa 3 |
+| Service Token `webmail` do Access (Client ID e Client Secret) | `~/.config/webmail/api.env` no servidor (`chmod 600`). O Client ID também como `wrangler secret` `ACCESS_CLIENT_ID` | Webmail → Cloudflare Access na frente de `mail-api.survivus.com.br` | Passa só pela política "Service Auth" dessa aplicação | Criado no PR 2 da Etapa 3 |
 
 Tokens SMTP: rotação a cada 6 meses, ou na hora em caso de suspeita.
 

@@ -66,6 +66,7 @@ pnpm exec wrangler d1 delete webmail-db
 ```bash
 pnpm exec wrangler d1 migrations apply webmail-db --remote
 pnpm exec wrangler d1 execute webmail-db --remote --file seed/0001_survivus.sql
+pnpm exec wrangler d1 execute webmail-db --remote --file seed/0002_daniel.sql   # Etapa 3
 ```
 
 As migrações aplicadas ficam registradas na tabela `d1_migrations`. O seed usa `INSERT OR IGNORE`, então pode ser rodado de novo sem duplicar.
@@ -76,7 +77,7 @@ As migrações aplicadas ficam registradas na tabela `d1_migrations`. O seed usa
 pnpm exec wrangler deploy
 ```
 
-O deploy sai sempre da `main` atualizada, nunca de um branch sem revisão. O `mail-core` não tem secrets por enquanto.
+O deploy sai sempre da `main` atualizada, nunca de um branch sem revisão. Secrets do `mail-core`: `INTERNAL_API_TOKEN` e `ACCESS_CLIENT_ID` (seção 8).
 
 ### Workers descartáveis (testes)
 
@@ -137,3 +138,50 @@ pnpm exec wrangler tail mail-core
 ```
 
 O `tail` não guarda nada, mas **mostra** o evento com o `mailFrom` no terminal. Use só durante os testes e não cole a saída em lugar público.
+
+## 8. API interna (Etapa 3, PR 2)
+
+Roteiro para o PR 2. As telas do painel são as da documentação em 2026-10-29 (`docs/cloudflare-api.md`): confira na hora e corrija aqui o que tiver mudado.
+
+### 8.1 Segredos, gerados por você
+
+```bash
+mkdir -p ~/.config/webmail
+install -m 600 /dev/null ~/.config/webmail/api.env
+openssl rand -base64 48   # copie o resultado direto para o nano
+nano ~/.config/webmail/api.env   # INTERNAL_API_TOKEN=...
+pnpm exec wrangler secret put INTERNAL_API_TOKEN   # digite o mesmo valor
+```
+
+### 8.2 Domínio da API
+
+1. Workers & Pages › `mail-core` › **Settings** › **Domains & Routes** › **Add** › **Custom Domain**.
+2. Digite `mail-api.survivus.com.br` e confirme. A Cloudflare cria o DNS e o certificado.
+3. O hostname não pode ter um CNAME antes.
+
+### 8.3 Cloudflare Access
+
+1. **Service Token:**
+   - Zero Trust › **Access controls** › **Service credentials** › **Service Tokens** › **Create Service Token**.
+   - Nome `webmail`, depois **Generate token**.
+   - O Client Secret aparece **uma vez só**. Copie o Client ID e o Client Secret direto para o `api.env` (`CF_ACCESS_CLIENT_ID=...` e `CF_ACCESS_CLIENT_SECRET=...`).
+2. **Aplicação:**
+   - Tipo self-hosted, no hostname `mail-api.survivus.com.br`.
+   - Uma política com ação **Service Auth**, incluindo só o token `webmail`.
+   - Se houver a opção de autenticação estrita por service token, ligue: falha responde 401/403, sem redirecionar para login.
+3. **Valores para o Worker:**
+   - `ACCESS_AUD` e `ACCESS_TEAM_DOMAIN` não são segredos: entram como `vars` no `wrangler.jsonc`, por PR.
+   - O `ACCESS_AUD` é o AUD tag da aplicação.
+   - O `ACCESS_TEAM_DOMAIN` tem o formato `https://<equipe>.cloudflareaccess.com`.
+   - Quando entrarem no `wrangler.jsonc`, tire os dois de `src/env.d.ts`.
+4. **Client ID como secret:** `pnpm exec wrangler secret put ACCESS_CLIENT_ID` (digite o Client ID).
+
+### 8.4 Banco e deploy
+
+```bash
+pnpm exec wrangler d1 migrations apply webmail-db --remote
+pnpm exec wrangler d1 execute webmail-db --remote --file seed/0002_daniel.sql
+pnpm exec wrangler deploy   # da main atualizada e limpa
+```
+
+Depois do deploy, confira que o Custom Domain continua ligado: a documentação não diz o que o deploy faz com um domínio criado pelo painel.

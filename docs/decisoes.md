@@ -181,3 +181,52 @@ Registro curto das decisões já tomadas e seus motivos. Mudanças de arquitetur
 **Decisão:** ativar o Email Routing, verificar o endereço de reserva e criar o catch-all são feitos à mão no painel (passo a passo em `docs/cloudflare.md`). O token do Wrangler só tem permissões de conta (Workers Scripts, D1, R2, Queues, Workers Tail, User Details) e expira em 2026-11-30.
 
 **Motivo:** ativar o Email Routing pela API exige *Zone Settings: Edit*, que também permite mudar outras configurações da zona (SSL, por exemplo). São três ações feitas uma vez só, então não compensa deixar essa permissão num token que fica guardado no servidor.
+
+## API interna com dois cadeados: Cloudflare Access e bearer
+
+**Decisão:** a API do `mail-core` (`docs/api.md`) fica atrás de dois controles independentes.
+1. **Cloudflare Access com Service Token** no hostname da API: sem `CF-Access-Client-Id` e `CF-Access-Client-Secret`, o pedido é barrado na borda.
+2. **Bearer** (`INTERNAL_API_TOKEN`), comparado pelo Worker em tempo constante.
+
+O Worker também valida o JWT do Access (`Cf-Access-Jwt-Assertion`):
+- só RS256;
+- `iss` exatamente igual ao team domain;
+- `aud` contendo o AUD da aplicação;
+- `exp` obrigatório;
+- `exp` e `nbf` com no máximo 60 s de tolerância;
+- `common_name` igual ao Client ID do Service Token `webmail`.
+
+**Motivo:** vazar um só dos segredos não basta para entrar. Validar o JWT no Worker mantém a API **fechada** se o Access for desligado ou mal configurado por engano (mesma regra do `/admin`). Conferir o `common_name` barra outro Service Token, caso alguém acrescente outra política na aplicação.
+
+- **Fonte das chaves fixa no código:** só o `src/index.ts` escolhe a fonte, e é sempre a URL de certificados do Access. O team domain precisa ter a forma `https://<nome>.cloudflareaccess.com`, então nenhuma configuração aponta a busca de chaves para outro servidor. A chave de teste só entra pelo código de teste (`createApi(chaves)`).
+- **`nbf` só quando existe:** o exemplo de payload de Service Token da documentação não tem `nbf`. Exigir esse campo poderia barrar o token real. O `exp` é obrigatório.
+
+## Sem permissão é 404, não 403
+
+**Decisão:** caixa, mensagem, anexo ou `.eml` sem permissão respondem 404, com o mesmo corpo de um recurso inexistente. Toda rota com `:id` de mensagem descobre a caixa **pela mensagem** e confere `user_mailboxes.can_read`. Um anexo só é achado dentro da mensagem já autorizada.
+
+**Motivo:** quem não tem acesso não consegue nem saber se a mensagem existe. Nenhum ID vindo do pedido decide o acesso.
+
+## Anexos e `.eml` sempre como download
+
+**Decisão:** todo download sai com:
+- `Content-Type: application/octet-stream`;
+- `Content-Disposition: attachment`, com o nome limpo;
+- `X-Content-Type-Options: nosniff`;
+- `Cache-Control: private, no-store`.
+
+O tipo declarado pelo remetente só aparece nos metadados em JSON. O HTML do e-mail sai como dado dentro de JSON, nunca como `text/html`.
+
+**Motivo:** um anexo HTML ou SVG aberto como página do nosso domínio rodaria script do remetente. A decisão sobre o que exibir fica com o webmail (Etapa 6), que sanitiza.
+
+## Sem CORS na API
+
+**Decisão:** nenhuma resposta tem `Access-Control-*`, nem para *preflight*.
+
+**Motivo:** a API é chamada de servidor para servidor (webmail → `mail-core`). Sem CORS, nenhuma página aberta num navegador consegue ler as respostas, mesmo que obtenha algum segredo.
+
+## Rate limit por usuário com o binding do Workers
+
+**Decisão:** 100 pedidos por minuto por usuário, com o binding `ratelimits` (chave = ID do usuário), depois da autenticação.
+
+**Motivo:** limita o estrago de um webmail comprometido ou com defeito. O binding é aproximado e vale por local da Cloudflare (`docs/cloudflare-api.md`): é proteção contra abuso, não cota exata.

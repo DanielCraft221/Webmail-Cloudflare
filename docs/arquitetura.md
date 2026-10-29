@@ -66,11 +66,11 @@ Todo o recebimento acontece dentro da Cloudflare. O servidor doméstico só é u
 1. O navegador acessa `webmail.survivus.com.br`.
 2. A Cloudflare encaminha pelo Tunnel até o `cloudflared`, que alcança o container `webmail` numa rede Docker exclusiva (sem portas publicadas).
 3. O usuário faz login (senha argon2id + TOTP). A sessão fica no SQLite local.
-4. O webmail chama a **API interna** do Worker por HTTPS com Bearer token, informando o usuário.
+4. O webmail chama a **API interna** do Worker (`docs/api.md`) por HTTPS, com o Service Token do Cloudflare Access e o Bearer token, informando o usuário.
 5. O Worker verifica, **em toda rota**, se o usuário tem permissão sobre a caixa pedida, e responde com dados do D1/R2.
 6. O webmail exibe o HTML da mensagem sanitizado (DOMPurify) dentro de `<iframe sandbox>`, sem scripts e com imagens remotas bloqueadas.
 
-O webmail **nunca** acessa D1/R2 diretamente. Se o servidor for comprometido, o atacante tem só o token da API, que continua sujeito às verificações de permissão do Worker.
+O webmail **nunca** acessa D1/R2 diretamente. Se o servidor for comprometido, o atacante tem só os segredos da API, que continuam sujeitos às verificações de permissão do Worker e ao rate limit.
 
 O IP real do visitante vem do cabeçalho `CF-Connecting-IP`. Ele só é confiável porque apenas o `cloudflared` alcança o container. Por isso o Nginx não fica na frente do webmail.
 
