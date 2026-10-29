@@ -17,7 +17,7 @@ O webmail manda **quatro** cabeçalhos em todo pedido:
 | `Authorization` | `Bearer <INTERNAL_API_TOKEN>` | Worker |
 | `X-Webmail-User` | UUID do usuário logado no webmail | Worker, no D1 |
 
-Sem o Service Token, o Access barra o pedido antes do Worker. Com ele, o Access acrescenta o `Cf-Access-Jwt-Assertion`, e o Worker confere, nesta ordem:
+Sem o Service Token (ou com um falso), o Access barra o pedido antes do Worker com `401` em `text/html` e o cabeçalho `cf-access-domain`. O `401` do Worker é sempre JSON. O webmail deve tratar os dois como falha de configuração, não como sessão expirada do usuário. Com o Service Token, o Access acrescenta o `Cf-Access-Jwt-Assertion`, e o Worker confere, nesta ordem:
 
 1. **JWT do Access:**
    - assinatura RS256 com as chaves de `https://<equipe>.cloudflareaccess.com/cdn-cgi/access/certs`;
@@ -35,6 +35,26 @@ As falhas de 1 a 3 respondem `401 {"error":"unauthorized"}`, sem dizer qual pass
 **O `X-Webmail-User` só identifica.** Ele nunca dá permissão: toda rota confere no D1 (`user_mailboxes.can_read`) se esse usuário lê a caixa.
 
 **Caixa desativada continua legível.** `mailboxes.active = 0` só faz o recebimento recusar novos e-mails para o endereço. Quem tem `can_read` na caixa continua vendo as mensagens antigas. Para tirar o acesso, remova a permissão em `user_mailboxes`.
+
+## Medido em produção (2026-10-29)
+
+Testes reais com `curl` depois do deploy (versão `1ddd2b98-76ea-4f7a-b152-f6638efe5417`). Hoje eles rodam em `scripts/smoke-api.sh` (`docs/cloudflare.md`, seção 8.5).
+
+- **Autenticação:**
+  - Sem cabeçalho: `401` do Access, em `text/html`.
+  - Só o Service Token, Service Token e bearer sem `X-Webmail-User`, ou com um UUID inexistente: `401 {"error":"unauthorized"}` do Worker.
+  - Com tudo certo: `200`. O JWT real do Access passou na conferência estrita (assinatura, `iss`, `aud`, `exp` e `common_name`).
+- **Respostas:** as respostas JSON vêm com `X-Content-Type-Options: nosniff` e `Cache-Control: no-store`, sem `Access-Control-*`.
+- **Anexo de 2.252.089 bytes:**
+  - `application/octet-stream`;
+  - `attachment; filename="Anexo.png"; filename*=UTF-8''Anexo.png`;
+  - `private, no-store`;
+  - mesmo tamanho do D1.
+  - O tipo declarado (`image/png`) não foi para a resposta.
+- **Anexo de 18.962.423 bytes:** baixado inteiro, com o tamanho do D1.
+- **`PATCH {"isRead":true}`:** a contagem de não lidas da pasta caiu 1 em `GET /v1/mailboxes`. `{"folder":"sent"}` deu `400`.
+- **`workers.dev`:** `404` com `error code: 1042` (desligado).
+- **Imagem inline também é anexo:** uma imagem colada no corpo pelo Gmail (`isInline: true`, com `contentId`) aparece em `attachments` e pode ser baixada pela mesma rota. A Etapa 6 usa o `contentId` para mostrá-la no HTML.
 
 ## Erros
 

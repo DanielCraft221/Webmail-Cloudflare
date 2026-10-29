@@ -178,3 +178,4 @@ Ideias novas não entram no roteiro direto: vão para a seção "Depois" do `doc
 - `pnpm test`: Vitest em todos os pacotes
 - `pnpm --filter @webmail/mail-core types`: regenera `apps/mail-core/worker-configuration.d.ts` depois de mudar o `wrangler.jsonc`
 - `pnpm --filter mail-core inbox:list`: lista as 20 últimas mensagens do D1 remoto (com `spf`, `dkim`, `dmarc`), só leitura, sem corpo nem endereço completo do remetente (precisa do token carregado, veja `docs/cloudflare.md`)
+- `scripts/smoke-api.sh`: teste de fumaça da API interna em produção, para rodar depois de todo deploy (`docs/cloudflare.md`, seção 8.5)

@@ -79,6 +79,8 @@ pnpm exec wrangler deploy
 
 O deploy sai sempre da `main` atualizada, nunca de um branch sem revisão. Secrets do `mail-core`: `INTERNAL_API_TOKEN`, `ACCESS_CLIENT_ID` e `ACCESS_AUD` (seção 8).
 
+**Depois de todo deploy**, rode o teste de fumaça da API (seção 8.5) e confira um e-mail real com o `inbox:list` (seção 6). Se algum falhar, volte para a versão anterior com `pnpm exec wrangler rollback <version-id>`. O id da versão no ar sai de `pnpm exec wrangler deployments status`: anote-o antes do deploy.
+
 ### Workers descartáveis (testes)
 
 Um Worker de teste fora do repositório se apaga **pelo painel**, na página do Worker. O `wrangler delete` falha com este token: antes de apagar, ele tenta listar namespaces KV, e o token não tem permissão de KV. Apague antes as regras do Email Routing que apontam para ele.
@@ -216,4 +218,33 @@ pnpm exec wrangler d1 execute webmail-db --remote --file seed/0002_danielcraft22
 pnpm exec wrangler deploy   # da main atualizada e limpa
 ```
 
-Depois do deploy, confira que o Custom Domain continua ligado: a documentação não diz o que o deploy faz com um domínio criado pelo painel.
+Medido em 2026-10-29: o `wrangler deploy` manteve o Custom Domain criado pelo painel (o `wrangler.jsonc` não tem `routes`). A prova é o teste de fumaça: com o Service Token, o `401` vem do Worker em JSON.
+
+### 8.5 Teste de fumaça da API (depois de todo deploy)
+
+`scripts/smoke-api.sh` testa a API em produção, camada por camada:
+- sem cabeçalho: `401` do Access;
+- só o Service Token, sem `X-Webmail-User`, ou com usuário inexistente: `401` do Worker;
+- caixas, leitura de uma mensagem e download de um anexo, com os cabeçalhos de download;
+- `PATCH` de lida, conferindo a contagem de não lidas, e `PATCH` com pasta inválida (`400`);
+- `workers.dev` desligado.
+
+Como funciona:
+- Lê o `~/.config/webmail/api.env` e nunca imprime os valores.
+- Descobre os ids pela própria API. Prefere uma mensagem com anexo e devolve a marca de lida ao estado original.
+- Mostra uma linha `PASS`, `FAIL` ou `SKIP` por teste. Sai com código `1` se algum falhar.
+
+Ele precisa do UUID de um usuário que lê pelo menos uma caixa, no `api.env`. Não é segredo:
+
+```bash
+printf 'SMOKE_USER_ID=%s\n' b2a98933-aa45-4af9-b0f3-dd58c4283e7b >> ~/.config/webmail/api.env
+```
+
+Rode da raiz do repositório. Com o token do Wrangler carregado, ele também confere o `workers.dev`:
+
+```bash
+(
+  set -a; . ~/.config/cloudflare/wrangler.env; set +a
+  scripts/smoke-api.sh
+)
+```
