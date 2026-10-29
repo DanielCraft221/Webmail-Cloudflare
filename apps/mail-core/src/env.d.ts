@@ -1,19 +1,16 @@
-// Set in Etapa 3 PR 2 (docs/cloudflare.md): vars in wrangler.jsonc, secrets with `wrangler secret put`.
-// `wrangler types` cannot see secrets. While any is missing, every /v1 request answers 401.
+// Secrets set with `wrangler secret put` (docs/cloudflare.md), which `wrangler types` cannot see.
+// While any is missing, every /v1 request answers 401.
 interface Env {
-  /** https://<team>.cloudflareaccess.com */
-  ACCESS_TEAM_DOMAIN?: string | undefined;
-  /** AUD tag of the Access application. */
+  /** AUD tag of the Access application. Not truly secret, kept out of the repo (docs/decisoes.md). */
   ACCESS_AUD?: string | undefined;
-  /** Client ID of the webmail service token, checked against the JWT common_name. Secret. */
+  /** Client ID of the webmail service token, checked against the JWT common_name. */
   ACCESS_CLIENT_ID?: string | undefined;
-  /** Bearer token the webmail sends. Secret. */
+  /** Bearer token the webmail sends. */
   INTERNAL_API_TOKEN?: string | undefined;
 }
 
 declare namespace Cloudflare {
   interface Env {
-    ACCESS_TEAM_DOMAIN?: string | undefined;
     ACCESS_AUD?: string | undefined;
     ACCESS_CLIENT_ID?: string | undefined;
     INTERNAL_API_TOKEN?: string | undefined;
