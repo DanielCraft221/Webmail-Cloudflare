@@ -22,9 +22,9 @@ Revisar e mergear o PR `etapa-3/deploy-vars`. Depois, na `main` atualizada e lim
 
 - PR 1 mergeado. Também mergeado: regra contra `--no-verify` no `CLAUDE.md`.
 - `~/.config/webmail/api.env` (`600`, pasta `700`) com `INTERNAL_API_TOKEN`, `CF_ACCESS_CLIENT_ID` e `CF_ACCESS_CLIENT_SECRET`, gerados por Daniel.
-- Secrets do `mail-core`: `INTERNAL_API_TOKEN` e `ACCESS_CLIENT_ID`. `ACCESS_AUD` também vira secret (o gitleaks o barrou no `wrangler.jsonc`, e não abrimos exceção).
+- Secrets do `mail-core`: `INTERNAL_API_TOKEN`, `ACCESS_CLIENT_ID` e `ACCESS_AUD`. O `ACCESS_AUD` virou secret porque o gitleaks o barrou no `wrangler.jsonc`, e não abrimos exceção.
 - Custom Domain `mail-api.survivus.com.br` ligado ao `mail-core` pelo painel.
-- Access: aplicação `mail-api`, Service Token `webmail`, política Service Auth. Sem Service Token: `403` do Access.
+- Access: aplicação `mail-api`, Service Token `webmail`, política Service Auth. Opção "Retorna a Resposta 401" ligada: sem Service Token, `401` do Access (`text/html`, com `cf-access-domain`). Service Token válido por 1 ano.
 - Branch `etapa-3/deploy-vars`: `ACCESS_TEAM_DOMAIN` em `vars`, regra contra exceções no gitleaks no `CLAUDE.md`.
 
 ### Falta

@@ -191,8 +191,11 @@ Todo `wrangler secret put` publica uma nova versão do código que está no ar, 
    - Tipo self-hosted, no hostname `mail-api.survivus.com.br`.
    - Uma política com ação **Service Auth**, incluindo só o token `webmail`.
    - Nenhuma outra política e nenhum login method.
-   - Se houver a opção de autenticação estrita por service token, ligue: falha responde 401/403, sem redirecionar para login.
-   - **Medido em 2026-10-29:** sem Service Token, o Access responde `403` com `cf-access-domain` e `cf-access-aud`, sem chegar ao Worker.
+   - Nas configurações da aplicação, em **Falha na autenticação do serviço**, ligue **Retorna a Resposta 401**.
+   - **Medido em 2026-10-29:**
+     - Com a opção ligada, um pedido sem cabeçalho ou com Service Token falso recebe `401` do Access e não chega ao Worker. Antes de ligar: `403` sem cabeçalho e `401` com token falso. Nunca houve redirecionamento para login.
+     - O `401` do Access vem como `text/html` (página "Error ・ Cloudflare Access"), com os cabeçalhos `cf-access-domain` e `cf-access-aud`.
+     - O `401` do Worker vem como `application/json` (`{"error":"unauthorized"}`), sem esses cabeçalhos.
 3. **Valores para o Worker:**
    - `ACCESS_TEAM_DOMAIN` entra como `vars` no `wrangler.jsonc`, por PR. Tem o formato `https://<equipe>.cloudflareaccess.com`.
    - `ACCESS_AUD` (o AUD tag da aplicação) é **secret** do Worker, gravado do `api.env` (`ACCESS_AUD=...`). Não é segredo de verdade, mas no `wrangler.jsonc` o gitleaks o barra, e não abrimos exceção no scanner (`docs/decisoes.md`).
