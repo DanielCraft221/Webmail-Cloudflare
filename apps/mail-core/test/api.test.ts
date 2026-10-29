@@ -9,6 +9,7 @@ import {
   addTestUsers,
   apiEnv,
   call,
+  DANIEL,
   OTHER,
 } from "./api-helpers";
 import htmlAttachment from "./fixtures/html-attachment.eml?raw";
@@ -365,17 +366,17 @@ describe("PATCH /v1/messages/:id", () => {
   });
 });
 
-describe("GET /v1/search", () => {
+describe("POST /v1/search", () => {
+  const search = (body: unknown, user = DANIEL) =>
+    call("/v1/search", { method: "POST", body, user });
+
   it("treats % and _ as text, not wildcards", async () => {
     const percent = await addMessage({ subject: "Desconto de 100% hoje" });
     await addMessage({ subject: "Desconto de 100 reais" });
     const underscore = await addMessage({ subject: "arquivo_final" });
     await addMessage({ subject: "arquivoXfinal" });
     const ids = async (q: string) =>
-      (
-        (await json(await call(`/v1/search?q=${encodeURIComponent(q)}`)))
-          .messages as Json[]
-      ).map((m) => m.id);
+      ((await json(await search({ q }))).messages as Json[]).map((m) => m.id);
     expect(await ids("100%")).toEqual([percent]);
     expect(await ids("o_f")).toEqual([underscore]);
     expect(await ids("%")).toEqual([percent]);
@@ -386,7 +387,7 @@ describe("GET /v1/search", () => {
     const byAddress = await addMessage({ from: "pedido@loja.example" });
     const byName = await addMessage({ fromName: "Setor de Pedidos" });
     await addMessage({ subject: "Outro" });
-    const found = (await json(await call("/v1/search?q=pedido")))
+    const found = (await json(await search({ q: "pedido" })))
       .messages as Json[];
     expect(found.map((m) => m.id).sort()).toEqual(
       [bySubject, byAddress, byName].sort(),
@@ -402,14 +403,13 @@ describe("GET /v1/search", () => {
       mailbox: "suporte@survivus.com.br",
       subject: "Segredo B",
     });
-    const found = (
-      await json(await call("/v1/search?q=Segredo", { user: OTHER }))
-    ).messages as Json[];
+    const found = (await json(await search({ q: "Segredo" }, OTHER)))
+      .messages as Json[];
     expect(found.map((m) => m.id)).toEqual([allowed]);
 
     const contato = await mailboxId("contato@survivus.com.br");
     const filtered = await json(
-      await call(`/v1/search?q=Segredo&mailbox=${contato}`, { user: OTHER }),
+      await search({ q: "Segredo", mailbox: contato }, OTHER),
     );
     expect(filtered.messages).toEqual([]);
   });
@@ -417,17 +417,28 @@ describe("GET /v1/search", () => {
   it(`caps results at ${SEARCH_LIMIT}`, async () => {
     for (let i = 0; i < SEARCH_LIMIT + 2; i++)
       await addMessage({ subject: "Lote" });
-    const found = (await json(await call("/v1/search?q=Lote")))
-      .messages as Json[];
+    const found = (await json(await search({ q: "Lote" }))).messages as Json[];
     expect(found).toHaveLength(SEARCH_LIMIT);
   });
 
-  it.each(["", "q=", `q=${"a".repeat(101)}`, "q=a&mailbox=x"])(
-    "rejects %j with 400",
-    async (query) => {
-      expect((await call(`/v1/search?${query}`)).status).toBe(400);
-    },
-  );
+  it.each([
+    "not json",
+    {},
+    { q: "" },
+    { q: "   " },
+    { q: "a".repeat(101) },
+    { q: "a", mailbox: "1" },
+    { q: "a", mailbox: true },
+    { q: "a", mailbox: 0 },
+    { q: "a", extra: 1 },
+  ])("rejects %j with 400", async (body) => {
+    expect((await search(body)).status).toBe(400);
+  });
+
+  it("does not answer GET with the term in the query string", async () => {
+    await addMessage({ subject: "Pedido 77" });
+    expect((await call("/v1/search?q=pedido")).status).toBe(404);
+  });
 });
 
 describe("responses", () => {
@@ -506,8 +517,11 @@ describe("API logs", () => {
     await call(`/v1/messages/${row?.id}`);
     await call(`/v1/messages/${row?.id}/attachments/${att?.id}`);
     await call(`/v1/messages/${row?.id}/raw`);
-    await call("/v1/search?q=termo-secreto-5521");
-    await call("/v1/search?q=Relatorio");
+    await call("/v1/search", {
+      method: "POST",
+      body: { q: "termo-secreto-5521" },
+    });
+    await call("/v1/search", { method: "POST", body: { q: "Relatorio" } });
     await call(`/v1/mailboxes/${row?.mailbox_id}/messages?folder=inbox`);
 
     const logged = lines.join("\n");
@@ -519,7 +533,7 @@ describe("API logs", () => {
       httpStatus: 200,
       ms: expect.any(Number),
     });
-    expect(entries.map((e) => e.route)).toContain("GET /v1/search");
+    expect(entries.map((e) => e.route)).toContain("POST /v1/search");
     for (const secret of [
       "Relatorio",
       "relatorio-interno-9931",

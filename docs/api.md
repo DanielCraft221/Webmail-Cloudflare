@@ -60,7 +60,7 @@ Testes reais com `curl` depois do deploy (versão `1ddd2b98-76ea-4f7a-b152-f6638
 
 | Status | Corpo | Quando |
 | --- | --- | --- |
-| 400 | `{"error":"bad_request"}` | Parâmetro de busca/paginação ou corpo do `PATCH` inválido |
+| 400 | `{"error":"bad_request"}` | Parâmetro de paginação, corpo da busca ou corpo do `PATCH` inválido |
 | 401 | `{"error":"unauthorized"}` | Autenticação (acima) |
 | 404 | `{"error":"not_found"}` | Recurso inexistente, ID malformado **ou sem permissão**. As três respostas são idênticas |
 | 429 | `{"error":"rate_limited"}` | Rate limit |
@@ -199,14 +199,20 @@ Marca como lida/não lida e/ou move de pasta. Corpo JSON, com pelo menos um camp
 - Resposta: `{ "id": "uuid", "isRead": true, "folder": "archive" }`.
 - JSON inválido, campo desconhecido, pasta `sent` ou desconhecida: 400, sem mudar nada.
 
-### `GET /v1/search?q=&mailbox=`
+### `POST /v1/search`
 
-Busca no assunto, no endereço e no nome do remetente, só nas caixas que o usuário lê, em todas as pastas.
+Busca no assunto, no endereço e no nome do remetente, só nas caixas que o usuário lê, em todas as pastas. O termo vai no **corpo**, nunca na URL, porque URLs acabam em logs (`docs/decisoes.md`, "Workers Logs desligados"). `GET /v1/search` responde 404.
 
-| Parâmetro | Regra |
+```json
+{ "q": "pedido", "mailbox": 1 }
+```
+
+| Campo | Regra |
 | --- | --- |
-| `q` | 1 a 100 caracteres, depois de tirar espaços das pontas. `%` e `_` são texto, não curinga |
-| `mailbox` | Opcional: ID de uma caixa. Caixa sem permissão dá lista vazia |
+| `q` | Texto de 1 a 100 caracteres, depois de tirar espaços das pontas. `%` e `_` são texto, não curinga |
+| `mailbox` | Opcional: ID de uma caixa, como número JSON (`"1"` é recusado). Caixa sem permissão dá lista vazia |
+
+JSON inválido, campo desconhecido ou tipo errado: 400.
 
 ```json
 { "messages": [MessageSummary] }
@@ -224,4 +230,4 @@ Cada pedido gera uma linha com:
 
 Nunca entram o caminho com IDs, a query string, o termo de busca, assunto, corpo, nome de anexo ou endereço de e-mail.
 
-**Atenção (medido em 2026-10-29):** isso vale para o nosso `log()`. Com os Workers Logs ligados, a Cloudflare grava junto com cada linha a URL completa do pedido (`$workers.event.request.url`), com ids e query string. Veja `docs/cloudflare.md`, seção 7.
+**Atenção (medido em 2026-10-29):** isso vale para o nosso `log()`. Com os Workers Logs ligados, a Cloudflare grava junto com cada linha a URL completa do pedido (`$workers.event.request.url`), com ids e query string. Por isso o armazenamento dos Workers Logs está desligado e a busca usa `POST` (`docs/decisoes.md`).
