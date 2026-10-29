@@ -6,14 +6,14 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 
 ### Próximo passo
 
-Revisar e mergear o PR `etapa-3/deploy-vars`. Depois, na `main` atualizada e limpa: migração `0002` e seed remotos, deploy e testes reais com `curl` (tarefa 7), em `docs/cloudflare.md`, seção 8.4. Cada passo com "ok" antes.
+Revisar e mergear o PR `etapa-3/seed-username`. Depois, na `main` atualizada e limpa: seed `0002_danielcraft221.sql` remoto, deploy e testes reais com `curl` (tarefa 7), em `docs/cloudflare.md`, seção 8.4. Cada passo com "ok" antes.
 
 ### Feito (2026-10-29)
 
 - Tarefa 8, primeira investigação: a configuração no ar está certa (`logs.enabled`, `persist`, amostragem 100%, `invocation_logs: false`, lida pela API). O token não tem *Workers Observability*, então não deu para consultar os logs guardados. A causa provável é a visão do painel: sem *invocation logs*, a visão "Invocations" fica vazia. Daniel vai tentar a visão **Events** com o filtro `event` = `queued`.
 - Pesquisa da tarefa 1 em `docs/cloudflare-api.md`.
 - PR 1 (`etapa-3/api`):
-  - migração `0002` (`users`, `user_mailboxes`, índice de paginação) e seed `0002_daniel.sql`;
+  - migração `0002` (`users`, `user_mailboxes`, índice de paginação) e seed `0002_daniel.sql` (depois renomeado para `0002_danielcraft221.sql`);
   - middleware: JWT do Access estrito, bearer em tempo constante, usuário ativo, rate limit de 100/min por usuário;
   - as 7 rotas e 108 testes no mail-core;
   - `docs/api.md`, decisões e inventário de segredos.
@@ -25,12 +25,23 @@ Revisar e mergear o PR `etapa-3/deploy-vars`. Depois, na `main` atualizada e lim
 - Secrets do `mail-core`: `INTERNAL_API_TOKEN`, `ACCESS_CLIENT_ID` e `ACCESS_AUD`. O `ACCESS_AUD` virou secret porque o gitleaks o barrou no `wrangler.jsonc`, e não abrimos exceção.
 - Custom Domain `mail-api.survivus.com.br` ligado ao `mail-core` pelo painel.
 - Access: aplicação `mail-api`, Service Token `webmail`, política Service Auth. Opção "Retorna a Resposta 401" ligada: sem Service Token, `401` do Access (`text/html`, com `cf-access-domain`). Service Token válido por 1 ano.
-- Branch `etapa-3/deploy-vars`: `ACCESS_TEAM_DOMAIN` em `vars`, regra contra exceções no gitleaks no `CLAUDE.md`.
+- PR `etapa-3/deploy-vars` mergeado: `ACCESS_TEAM_DOMAIN` em `vars`, regra contra exceções no gitleaks no `CLAUDE.md`.
+- Migração `0002` aplicada no D1 remoto (ponto de restauração abaixo). O seed ainda não rodou.
+- Branch `etapa-3/seed-username`: username do seed trocado de `daniel` para `danielcraft221`, com o mesmo id. Arquivo renomeado para `seed/0002_danielcraft221.sql`.
+
+### Ponto de restauração do D1 (antes da migração `0002`)
+
+- Bookmark do `webmail-db` em 2026-10-29T15:34:38Z, lido com `wrangler d1 time-travel info webmail-db`: `0000000d-00000000-00005113-3a1217d20dc99b47d1b81b2beffc1372`.
+- Para voltar a este ponto (com "ok" antes, porque apaga tudo o que foi gravado depois, inclusive e-mails recebidos):
+
+  ```bash
+  pnpm exec wrangler d1 time-travel restore webmail-db --bookmark=0000000d-00000000-00005113-3a1217d20dc99b47d1b81b2beffc1372
+  ```
 
 ### Falta
 
-- PR `etapa-3/deploy-vars`: revisão e merge.
-- Migração e seed remotos, deploy e testes reais com `curl` (tarefa 7).
+- PR `etapa-3/seed-username`: revisão e merge.
+- Seed remoto, deploy e testes reais com `curl` (tarefa 7).
 - Conferir depois do deploy que o Custom Domain continua ligado.
 - **Verificação pendente (tarefa 8):** controle positivo nos Workers Logs. Achar o `queued` na visão Events do painel e, com ele aparecendo, procurar o endereço completo de um remetente de teste, que não pode aparecer. Se a visão Events também não mostrar, registrar aqui e decidir como seguir. O token não muda.
 
