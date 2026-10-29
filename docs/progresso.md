@@ -6,7 +6,13 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 
 ### Próximo passo
 
-**Decidir o que fazer com os Workers Logs** (tarefa 8, abaixo): eles guardam o endereço completo do remetente e a URL dos pedidos da API. A recomendação é desligar o armazenamento (`observability.enabled: false` no `wrangler.jsonc`, por PR, e deploy). Depois da decisão, a Etapa 3 pode ser concluída. O próximo passo passa a ser a Etapa 4.
+Revisar e mergear o PR `etapa-3/logs` (Workers Logs desligados, busca por `POST`). Depois, na `main` atualizada e limpa, cada passo com "ok" antes:
+1. deploy;
+2. `scripts/smoke-api.sh`;
+3. e-mail de teste do Daniel, conferido com o `inbox:list`;
+4. controle positivo com o token `logs-check` (expira em 2026-10-30): nenhum evento novo guardado depois do deploy.
+
+Só então: Etapa 3 concluída, e o próximo passo passa a ser a Etapa 4.
 
 ### Feito (2026-10-29)
 
@@ -63,7 +69,7 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 
 ### Falta
 
-- **Tarefa 8:** decidir sobre os Workers Logs (próximo passo). Revogar o token `logs-check` (expira em 2026-10-30) e apagar `~/.config/cloudflare/logs-check.env`.
+- **Tarefa 8:** decidido desligar o armazenamento dos Workers Logs (PR `etapa-3/logs`). Falta o deploy e a prova de que nada novo é guardado. Depois, revogar o token `logs-check` (expira em 2026-10-30) e apagar `~/.config/cloudflare/logs-check.env`.
 - Com a decisão aplicada: marcar a Etapa 3 como concluída.
 
 ### Avisos para a Etapa 3
@@ -132,6 +138,7 @@ Etapa 2. O `docs/etapas/etapa-2.md` já está na pasta, mas ainda não foi commi
 
 Ideias que ainda não entraram no roteiro.
 
+- Tail Worker que receba os eventos do `mail-core` e guarde só os campos do nosso `log()`, sem `mailFrom`, `rcptTo` nem URL (os Workers Logs ficam desligados, `docs/decisoes.md`). Precisa de um lugar para guardar (D1 ou R2) e de uma retenção definida.
 - Ferramenta de reprocessamento da DLQ: reenviar para a fila os `.eml` do R2 que não têm linha no D1 (DLQ expirada após 14 dias), usando o `customMetadata` do objeto. Tratar como duplicata, pela `dedupeKey`, a cópia que fica em `raw/` quando a fila falha no handler.
 - Alerta quando chegar mensagem na DLQ `mail-ingest-dlq`.
 - Limpeza das duplicatas em `dup/` no R2 (hoje ficam para sempre). O reprocessamento acima deve ignorar `dup/`.
