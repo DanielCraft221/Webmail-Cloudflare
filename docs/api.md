@@ -223,3 +223,5 @@ Cada pedido gera uma linha com:
 - `ms`.
 
 Nunca entram o caminho com IDs, a query string, o termo de busca, assunto, corpo, nome de anexo ou endereço de e-mail.
+
+**Atenção (medido em 2026-10-29):** isso vale para o nosso `log()`. Com os Workers Logs ligados, a Cloudflare grava junto com cada linha a URL completa do pedido (`$workers.event.request.url`), com ids e query string. Veja `docs/cloudflare.md`, seção 7.

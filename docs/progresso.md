@@ -6,7 +6,7 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 
 ### Próximo passo
 
-Revisar e mergear o PR `etapa-3/seed-username`. Depois, na `main` atualizada e limpa: seed `0002_danielcraft221.sql` remoto, deploy e testes reais com `curl` (tarefa 7), em `docs/cloudflare.md`, seção 8.4. Cada passo com "ok" antes.
+**Decidir o que fazer com os Workers Logs** (tarefa 8, abaixo): eles guardam o endereço completo do remetente e a URL dos pedidos da API. A recomendação é desligar o armazenamento (`observability.enabled: false` no `wrangler.jsonc`, por PR, e deploy). Depois da decisão, a Etapa 3 pode ser concluída. O próximo passo passa a ser a Etapa 4.
 
 ### Feito (2026-10-29)
 
@@ -29,6 +29,29 @@ Revisar e mergear o PR `etapa-3/seed-username`. Depois, na `main` atualizada e l
 - Migração `0002` aplicada no D1 remoto (ponto de restauração abaixo). O seed ainda não rodou.
 - Branch `etapa-3/seed-username`: username do seed trocado de `daniel` para `danielcraft221`, com o mesmo id. Arquivo renomeado para `seed/0002_danielcraft221.sql`.
 
+### Feito (2026-10-29, deploy e testes)
+
+- PR `etapa-3/deploy-vars` mergeado. PR `etapa-3/seed-username` mergeado: o primeiro usuário é `danielcraft221`, com o mesmo id.
+- Na `main`: migração `0002` e seed `0002_danielcraft221.sql` remotos. O D1 tem 1 usuário (`admin`, ativo) com `can_read` nas 3 caixas.
+- **Deploy:** versão `1ddd2b98-76ea-4f7a-b152-f6638efe5417`. A anterior, para rollback, era `4179dac6-c834-4be7-95b6-6d1500bf78d5` (código da Etapa 2 com os secrets). O Custom Domain continuou ligado.
+- **Recebimento depois do deploy:** um e-mail real para `contato@` chegou com `parse_status` `ok` e `spf`, `dkim` e `dmarc` = `pass`.
+- **Tarefa 7, todos os testes passaram:**
+  - sem cabeçalho: `401` do Access (`text/html`);
+  - só o Service Token: `401` JSON do Worker;
+  - usuário inexistente: `401`;
+  - `GET /v1/mailboxes` lista as 3 caixas;
+  - mensagem do teste 1 da Etapa 2 lida com metadados e corpo;
+  - anexo de 2.252.089 bytes com `octet-stream`, `attachment` e `nosniff`, do mesmo tamanho do D1;
+  - `PATCH` de lida mudou a contagem de não lidas (5 → 4);
+  - `workers.dev` responde `404`/`1042`.
+  - Detalhes em `docs/api.md` ("Medido em produção").
+- **Teste de fumaça:** `scripts/smoke-api.sh`, para rodar depois de todo deploy (`docs/cloudflare.md`, seção 8.5). Passou nos 11 testes contra produção e falhou como devia com usuário inválido.
+- **Tarefa 8, controle positivo pela API** (token `logs-check`, só *Workers Observability Read*, que bastou para `telemetry/query`, ao contrário do que diz a referência da API):
+  - Eventos de hoje: `api_request` (36), `queued` (1) e `ingested` (1). O controle positivo funcionou.
+  - **Falhou:** a busca pelo **endereço completo** do remetente de teste achou o evento `queued`, nos campos `$workers.event.mailFrom` e `$metadata.trigger`. A Cloudflare acrescenta esses campos a todo `console.log` de uma invocação de e-mail, mesmo com `invocation_logs: false`. O nosso `log()` não grava o endereço; quem grava é a plataforma.
+  - **Também falhou:** os `api_request` guardam `$workers.event.request.url` com o caminho (ids de mensagem) e a query string (`request.search.*`). Uma busca guardaria o termo pesquisado. A regra de `docs/api.md` proíbe isso.
+  - A documentação dos Workers Logs não tem opção para excluir esses campos nem para apagar logs guardados. A retenção no plano pago é de 7 dias.
+
 ### Ponto de restauração do D1 (antes da migração `0002`)
 
 - Bookmark do `webmail-db` em 2026-10-29T15:34:38Z, lido com `wrangler d1 time-travel info webmail-db`: `0000000d-00000000-00005113-3a1217d20dc99b47d1b81b2beffc1372`.
@@ -40,10 +63,8 @@ Revisar e mergear o PR `etapa-3/seed-username`. Depois, na `main` atualizada e l
 
 ### Falta
 
-- PR `etapa-3/seed-username`: revisão e merge.
-- Seed remoto, deploy e testes reais com `curl` (tarefa 7).
-- Conferir depois do deploy que o Custom Domain continua ligado.
-- **Verificação pendente (tarefa 8):** controle positivo nos Workers Logs. Achar o `queued` na visão Events do painel e, com ele aparecendo, procurar o endereço completo de um remetente de teste, que não pode aparecer. Se a visão Events também não mostrar, registrar aqui e decidir como seguir. O token não muda.
+- **Tarefa 8:** decidir sobre os Workers Logs (próximo passo). Revogar o token `logs-check` (expira em 2026-10-30) e apagar `~/.config/cloudflare/logs-check.env`.
+- Com a decisão aplicada: marcar a Etapa 3 como concluída.
 
 ### Avisos para a Etapa 3
 

@@ -133,6 +133,12 @@ O `wrangler.jsonc` liga o `observability`, então os logs do Worker ficam guarda
 
 Os *invocation logs* (o registro automático de cada execução) ficam **desligados** (`invocation_logs: false`). O evento de e-mail traz o remetente completo do envelope (`mailFrom`), e a regra do projeto proíbe guardar esse endereço.
 
+**Medido em 2026-10-29 (tarefa 8 da Etapa 3): desligar os *invocation logs* não basta.** A Cloudflare acrescenta a cada `log()` os dados da invocação:
+- no evento de e-mail, `$workers.event.mailFrom` (remetente completo do envelope), `$workers.event.rcptTo` e `$metadata.trigger`;
+- num pedido da API, `$workers.event.request.url` (caminho com ids e query string).
+
+A documentação não tem opção para excluir esses campos. A retenção é de 7 dias. Decisão pendente em `docs/progresso.md`.
+
 Para acompanhar ao vivo:
 
 ```bash
