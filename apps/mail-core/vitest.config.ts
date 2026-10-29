@@ -9,6 +9,11 @@ export default defineConfig({
       miniflare: {
         bindings: {
           TEST_MIGRATIONS: await readD1Migrations("migrations"),
+          // Fake values for tests only. Production sets these in Etapa 3 PR 2.
+          ACCESS_TEAM_DOMAIN: "https://webmail-test.cloudflareaccess.com",
+          ACCESS_AUD: "test-aud",
+          ACCESS_CLIENT_ID: "test-client.access",
+          INTERNAL_API_TOKEN: "test-bearer",
         },
       },
     })),

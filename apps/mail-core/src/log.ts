@@ -10,6 +10,11 @@ export type LogEntry = {
   error?: string;
   /** SHA-256 dedupe key: a hash, never the headers it was computed from. */
   dedupeKey?: string;
+  /** API: route pattern (never the path or query string), user id, HTTP status and duration. */
+  route?: string;
+  user?: string;
+  httpStatus?: number;
+  ms?: number;
 };
 
 export function log(entry: LogEntry): void {
