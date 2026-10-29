@@ -178,9 +178,15 @@ importers:
 
   apps/mail-core:
     dependencies:
+      '@webmail/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       hono:
         specifier: 4.13.13
         version: 4.13.13
+      jose:
+        specifier: 6.2.13
+        version: 6.2.13
       postal-mime:
         specifier: 4.0.11
         version: 4.0.11
@@ -968,6 +974,9 @@ packages:
   hono@4.13.13:
     resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
     engines: {node: '>=16.9.0'}
+
+  jose@6.2.13:
+    resolution: {integrity: sha512-7TIg10ZE1x82YediN+lcrPNvGMKge9yFHQD+Qho/b8y2adfugU3AsvvHfxV0fzyFllT6l9xCjf4RWY9g/Z9PJQ==}
 
   kleur@4.1.5:
     resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
@@ -1808,6 +1817,8 @@ snapshots:
     optional: true
 
   hono@4.13.13: {}
+
+  jose@6.2.13: {}
 
   kleur@4.1.5: {}
 

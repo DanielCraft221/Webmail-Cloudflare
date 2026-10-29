@@ -1,9 +1,10 @@
-import { Hono } from "hono";
+import { remoteAccessKeys } from "./access";
+import { createApi } from "./api";
 import { handleEmail } from "./email";
 import { handleQueue, type IngestJob } from "./ingest";
 
-// No HTTP API in Etapa 2: with no routes, Hono answers 404 to every request.
-const app = new Hono();
+// The only place the Access key source is chosen: always the real certs endpoint.
+const app = createApi(remoteAccessKeys);
 
 export default {
   fetch: app.fetch,

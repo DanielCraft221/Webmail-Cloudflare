@@ -17,7 +17,7 @@ Internet ──MX──> Cloudflare Email Routing ──> Worker "mail-core" (ap
                                                 ├─ R2: .eml bruto, corpo parseado, anexos
                                                 ├─ D1: metadados, caixas, usuários, permissões (fonte da verdade)
                                                 ├─ Envio: binding do Cloudflare Email Service
-                                                └─ API interna HTTPS (Bearer token) ─ usada só pelo webmail
+                                                └─ API interna HTTPS (Access + Bearer) ─ usada só pelo webmail (docs/api.md)
                                                         ▲
 nLogin / NodeBB ──SMTP 465 (um token cada)──> smtp.mx.cloudflare.net (não passa por este projeto)
                                                         ▲

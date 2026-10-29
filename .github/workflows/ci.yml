@@ -33,6 +33,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Reject bidi control characters (Trojan Source)
+        # U+202A-U+202E and U+2066-U+2069 as UTF-8 bytes, in every tracked file. Binary files are
+        # searched too: a NUL byte must not hide a source file. Exclude a real binary by pathspec.
+        run: |
+          status=0
+          LC_ALL=C git grep -nP '\xE2\x80[\xAA-\xAE]|\xE2\x81[\xA6-\xA9]' || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo "::error::Bidi control character in a tracked file (Trojan Source). Write it as a \\u escape."
+            exit 1
+          fi
+          [ "$status" -eq 1 ] # 1 = no match; anything else is a git grep error
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           cache: true # pnpm store, keyed by pnpm-lock.yaml

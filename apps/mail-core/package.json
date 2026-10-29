@@ -11,7 +11,9 @@
     "inbox:list": "wrangler d1 execute webmail-db --remote --command \"SELECT m.received_at AS data, b.address AS caixa, CASE WHEN instr(m.from_address, '@') > 0 THEN lower(substr(m.from_address, instr(m.from_address, '@') + 1)) ELSE 'unknown' END AS remetente_dominio, m.subject AS assunto, m.folder AS pasta, m.parse_status, m.spf, m.dkim, m.dmarc FROM messages m JOIN mailboxes b ON b.id = m.mailbox_id ORDER BY m.received_at DESC LIMIT 20\""
   },
   "dependencies": {
+    "@webmail/shared": "workspace:*",
     "hono": "4.13.13",
+    "jose": "6.2.13",
     "postal-mime": "4.0.11"
   },
   "devDependencies": {

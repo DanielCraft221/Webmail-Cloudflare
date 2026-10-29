@@ -2,15 +2,31 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 3 (não iniciada)
+## Etapa atual: 3 (em andamento)
 
 ### Próximo passo
 
-Colocar o `docs/etapas/etapa-3.md` na pasta (ainda não existe), commitar num branch, ler e apresentar o plano curto da Etapa 3 e esperar aprovação.
+Revisar e mergear o PR 1 (`etapa-3/api`). Depois: `git checkout main && git pull --ff-only`, criar o branch `etapa-3/deploy` e seguir o roteiro do PR 2 em `docs/cloudflare.md` (seção 8), um passo de cada vez, com "ok" antes de cada mudança na Cloudflare.
+
+### Feito (2026-10-29)
+
+- Tarefa 8, primeira investigação: a configuração no ar está certa (`logs.enabled`, `persist`, amostragem 100%, `invocation_logs: false`, lida pela API). O token não tem *Workers Observability*, então não deu para consultar os logs guardados. A causa provável é a visão do painel: sem *invocation logs*, a visão "Invocations" fica vazia. Daniel vai tentar a visão **Events** com o filtro `event` = `queued`.
+- Pesquisa da tarefa 1 em `docs/cloudflare-api.md`.
+- PR 1 (`etapa-3/api`):
+  - migração `0002` (`users`, `user_mailboxes`, índice de paginação) e seed `0002_daniel.sql`;
+  - middleware: JWT do Access estrito, bearer em tempo constante, usuário ativo, rate limit de 100/min por usuário;
+  - as 7 rotas e 108 testes no mail-core;
+  - `docs/api.md`, decisões e inventário de segredos.
+
+### Falta
+
+- PR 1: revisão e merge.
+- PR 2 (`etapa-3/deploy`): segredos, domínio `mail-api.survivus.com.br`, Access, `vars` no `wrangler.jsonc`, migração e seed remotos, deploy e testes reais com `curl` (tarefa 7).
+- **Verificação pendente (tarefa 8):** controle positivo nos Workers Logs. Achar o `queued` na visão Events do painel e, com ele aparecendo, procurar o endereço completo de um remetente de teste, que não pode aparecer. Se a visão Events também não mostrar, registrar aqui e decidir como seguir. O token não muda.
 
 ### Avisos para a Etapa 3
 
-- Anexos servidos pela API sempre com `Content-Disposition: attachment` e `X-Content-Type-Options: nosniff`, para o navegador nunca abrir um anexo (HTML, SVG) como página do nosso domínio.
+- Anexos servidos pela API sempre com `Content-Disposition: attachment` e `X-Content-Type-Options: nosniff`, para o navegador nunca abrir um anexo (HTML, SVG) como página do nosso domínio. **Feito no PR 1.**
 
 ## Etapa 2: concluída (2026-10-28)
 
