@@ -34,6 +34,8 @@ As falhas de 1 a 3 respondem `401 {"error":"unauthorized"}`, sem dizer qual pass
 
 **O `X-Webmail-User` só identifica.** Ele nunca dá permissão: toda rota confere no D1 (`user_mailboxes.can_read`) se esse usuário lê a caixa.
 
+**Caixa desativada continua legível.** `mailboxes.active = 0` só faz o recebimento recusar novos e-mails para o endereço. Quem tem `can_read` na caixa continua vendo as mensagens antigas. Para tirar o acesso, remova a permissão em `user_mailboxes`.
+
 ## Erros
 
 | Status | Corpo | Quando |
