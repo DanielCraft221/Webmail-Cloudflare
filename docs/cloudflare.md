@@ -66,7 +66,7 @@ pnpm exec wrangler d1 delete webmail-db
 ```bash
 pnpm exec wrangler d1 migrations apply webmail-db --remote
 pnpm exec wrangler d1 execute webmail-db --remote --file seed/0001_survivus.sql
-pnpm exec wrangler d1 execute webmail-db --remote --file seed/0002_daniel.sql   # Etapa 3
+pnpm exec wrangler d1 execute webmail-db --remote --file seed/0002_danielcraft221.sql   # Etapa 3
 ```
 
 As migrações aplicadas ficam registradas na tabela `d1_migrations`. O seed usa `INSERT OR IGNORE`, então pode ser rodado de novo sem duplicar.
@@ -212,7 +212,7 @@ Todo `wrangler secret put` publica uma nova versão do código que está no ar, 
 
 ```bash
 pnpm exec wrangler d1 migrations apply webmail-db --remote
-pnpm exec wrangler d1 execute webmail-db --remote --file seed/0002_daniel.sql
+pnpm exec wrangler d1 execute webmail-db --remote --file seed/0002_danielcraft221.sql
 pnpm exec wrangler deploy   # da main atualizada e limpa
 ```
 

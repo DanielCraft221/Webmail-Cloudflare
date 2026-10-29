@@ -53,7 +53,7 @@ Confira na documentação atual da Cloudflare e registre em `docs/cloudflare-api
 - `users`: id (UUID), username (único, minúsculas), nome de exibição, papel (`admin` ou `user`, com `CHECK`), ativo, data de criação. **Senha e 2FA ficam para a migração da Etapa 5**, não crie essas colunas agora.
 - `user_mailboxes`: usuário, caixa, `can_read`, `can_send` (padrão 0, para a Etapa 8). Chave primária composta (usuário, caixa).
 - Índice para buscar as caixas de um usuário.
-- **Seed:** um usuário `daniel` (`admin`) com leitura nas três caixas do survivus.com.br. O username não é segredo.
+- **Seed:** um usuário `danielcraft221` (`admin`) com leitura nas três caixas do survivus.com.br. O username não é segredo.
 
 ### 3. Middleware (PR 1)
 
@@ -128,7 +128,7 @@ Os comandos leem os valores de `~/.config/webmail/api.env` sem imprimi-los.
 | Sem nenhum cabeçalho | Barrado pelo Access (403 ou tela de login da Cloudflare), sem chegar ao Worker |
 | Com o Service Token, sem bearer | 401 do Worker |
 | Com os dois, usuário inexistente | 401 |
-| Com os dois e o usuário `daniel` | `GET /v1/mailboxes` lista as três caixas |
+| Com os dois e o usuário `danielcraft221` | `GET /v1/mailboxes` lista as três caixas |
 | Ler a mensagem do teste 1 da Etapa 2 | Metadados e corpo corretos |
 | Baixar o anexo do teste 1 | `application/octet-stream`, `attachment`, `nosniff`; o arquivo baixado tem o mesmo tamanho do D1 |
 | `PATCH` marcando como lida | A contagem de não lidas muda em `GET /v1/mailboxes` |
