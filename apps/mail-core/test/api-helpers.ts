@@ -10,7 +10,7 @@ import {
 import { createApi } from "../src/api";
 import { mailboxId } from "./helpers";
 
-/** Seeded admin (seed/0002_daniel.sql): reads the three survivus.com.br mailboxes. */
+/** Seeded admin (seed/0002_danielcraft221.sql): reads the three survivus.com.br mailboxes. */
 export const DANIEL = "b2a98933-aa45-4af9-b0f3-dd58c4283e7b";
 /** Reads only suporte@. */
 export const OTHER = "00000000-0000-4000-8000-000000000001";

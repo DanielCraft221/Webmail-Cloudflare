@@ -202,7 +202,7 @@ describe("bearer token", () => {
 describe("X-Webmail-User", () => {
   it.each([
     ["missing", null],
-    ["not a UUID", "daniel"],
+    ["not a UUID", "danielcraft221"],
     ["unknown", "00000000-0000-4000-8000-0000000000ff"],
     ["inactive", INACTIVE],
   ])("refuses a %s user", async (_, user) => {
