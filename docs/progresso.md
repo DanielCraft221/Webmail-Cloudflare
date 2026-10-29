@@ -6,7 +6,7 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 
 ### Próximo passo
 
-Revisar e mergear o PR 1 (`etapa-3/api`). Depois: `git checkout main && git pull --ff-only`, criar o branch `etapa-3/deploy` e seguir o roteiro do PR 2 em `docs/cloudflare.md` (seção 8), um passo de cada vez, com "ok" antes de cada mudança na Cloudflare.
+Revisar e mergear o PR `etapa-3/deploy-vars`. Depois, na `main` atualizada e limpa: migração `0002` e seed remotos, deploy e testes reais com `curl` (tarefa 7), em `docs/cloudflare.md`, seção 8.4. Cada passo com "ok" antes.
 
 ### Feito (2026-10-29)
 
@@ -18,10 +18,20 @@ Revisar e mergear o PR 1 (`etapa-3/api`). Depois: `git checkout main && git pull
   - as 7 rotas e 108 testes no mail-core;
   - `docs/api.md`, decisões e inventário de segredos.
 
+### Feito (2026-10-29, PR 2)
+
+- PR 1 mergeado. Também mergeado: regra contra `--no-verify` no `CLAUDE.md`.
+- `~/.config/webmail/api.env` (`600`, pasta `700`) com `INTERNAL_API_TOKEN`, `CF_ACCESS_CLIENT_ID` e `CF_ACCESS_CLIENT_SECRET`, gerados por Daniel.
+- Secrets do `mail-core`: `INTERNAL_API_TOKEN`, `ACCESS_CLIENT_ID` e `ACCESS_AUD`. O `ACCESS_AUD` virou secret porque o gitleaks o barrou no `wrangler.jsonc`, e não abrimos exceção.
+- Custom Domain `mail-api.survivus.com.br` ligado ao `mail-core` pelo painel.
+- Access: aplicação `mail-api`, Service Token `webmail`, política Service Auth. Opção "Retorna a Resposta 401" ligada: sem Service Token, `401` do Access (`text/html`, com `cf-access-domain`). Service Token válido por 1 ano.
+- Branch `etapa-3/deploy-vars`: `ACCESS_TEAM_DOMAIN` em `vars`, regra contra exceções no gitleaks no `CLAUDE.md`.
+
 ### Falta
 
-- PR 1: revisão e merge.
-- PR 2 (`etapa-3/deploy`): segredos, domínio `mail-api.survivus.com.br`, Access, `vars` no `wrangler.jsonc`, migração e seed remotos, deploy e testes reais com `curl` (tarefa 7).
+- PR `etapa-3/deploy-vars`: revisão e merge.
+- Migração e seed remotos, deploy e testes reais com `curl` (tarefa 7).
+- Conferir depois do deploy que o Custom Domain continua ligado.
 - **Verificação pendente (tarefa 8):** controle positivo nos Workers Logs. Achar o `queued` na visão Events do painel e, com ele aparecendo, procurar o endereço completo de um remetente de teste, que não pode aparecer. Se a visão Events também não mostrar, registrar aqui e decidir como seguir. O token não muda.
 
 ### Avisos para a Etapa 3

@@ -77,7 +77,7 @@ As migrações aplicadas ficam registradas na tabela `d1_migrations`. O seed usa
 pnpm exec wrangler deploy
 ```
 
-O deploy sai sempre da `main` atualizada, nunca de um branch sem revisão. Secrets do `mail-core`: `INTERNAL_API_TOKEN` e `ACCESS_CLIENT_ID` (seção 8).
+O deploy sai sempre da `main` atualizada, nunca de um branch sem revisão. Secrets do `mail-core`: `INTERNAL_API_TOKEN`, `ACCESS_CLIENT_ID` e `ACCESS_AUD` (seção 8).
 
 ### Workers descartáveis (testes)
 
@@ -145,13 +145,27 @@ Roteiro para o PR 2. As telas do painel são as da documentação em 2026-10-29 
 
 ### 8.1 Segredos, gerados por você
 
+O valor vai direto para o arquivo, sem aparecer na tela nem passar pela área de transferência (`printf` é do próprio shell, então também não aparece no `ps`):
+
 ```bash
-mkdir -p ~/.config/webmail
+install -d -m 700 ~/.config/webmail
 install -m 600 /dev/null ~/.config/webmail/api.env
-openssl rand -base64 48   # copie o resultado direto para o nano
-nano ~/.config/webmail/api.env   # INTERNAL_API_TOKEN=...
-pnpm exec wrangler secret put INTERNAL_API_TOKEN   # digite o mesmo valor
+printf 'INTERNAL_API_TOKEN=%s\n' "$(openssl rand -base64 48)" > ~/.config/webmail/api.env
+grep -c '^INTERNAL_API_TOKEN=.\{64\}$' ~/.config/webmail/api.env   # esperado: 1
 ```
+
+Secret no Worker, lendo do arquivo pelo pipe. Os parênteses tiram o token da Cloudflare do shell no fim:
+
+```bash
+cd apps/mail-core
+(
+  set -a; . ~/.config/cloudflare/wrangler.env; set +a
+  . ~/.config/webmail/api.env
+  printf '%s' "$INTERNAL_API_TOKEN" | WRANGLER_SEND_METRICS=false pnpm exec wrangler secret put INTERNAL_API_TOKEN
+)
+```
+
+Todo `wrangler secret put` publica uma nova versão do código que está no ar, com o secret novo.
 
 ### 8.2 Domínio da API
 
@@ -164,17 +178,35 @@ pnpm exec wrangler secret put INTERNAL_API_TOKEN   # digite o mesmo valor
 1. **Service Token:**
    - Zero Trust › **Access controls** › **Service credentials** › **Service Tokens** › **Create Service Token**.
    - Nome `webmail`, depois **Generate token**.
-   - O Client Secret aparece **uma vez só**. Copie o Client ID e o Client Secret direto para o `api.env` (`CF_ACCESS_CLIENT_ID=...` e `CF_ACCESS_CLIENT_SECRET=...`).
+   - O Client Secret aparece **uma vez só**. Grave os dois no `api.env` sem que apareçam no terminal (o `read -s` não mostra o que é colado e não vai para o histórico):
+
+     ```bash
+     read -rsp 'Client ID: ' id; echo
+     read -rsp 'Client Secret: ' secret; echo
+     printf 'CF_ACCESS_CLIENT_ID=%s\nCF_ACCESS_CLIENT_SECRET=%s\n' "$id" "$secret" >> ~/.config/webmail/api.env
+     unset id secret
+     ```
+   - Depois copie qualquer outro texto, para tirar o secret da área de transferência.
 2. **Aplicação:**
    - Tipo self-hosted, no hostname `mail-api.survivus.com.br`.
    - Uma política com ação **Service Auth**, incluindo só o token `webmail`.
-   - Se houver a opção de autenticação estrita por service token, ligue: falha responde 401/403, sem redirecionar para login.
+   - Nenhuma outra política e nenhum login method.
+   - Nas configurações da aplicação, em **Falha na autenticação do serviço**, ligue **Retorna a Resposta 401**.
+   - **Medido em 2026-10-29:**
+     - Com a opção ligada, um pedido sem cabeçalho ou com Service Token falso recebe `401` do Access e não chega ao Worker. Antes de ligar: `403` sem cabeçalho e `401` com token falso. Nunca houve redirecionamento para login.
+     - O `401` do Access vem como `text/html` (página "Error ・ Cloudflare Access"), com os cabeçalhos `cf-access-domain` e `cf-access-aud`.
+     - O `401` do Worker vem como `application/json` (`{"error":"unauthorized"}`), sem esses cabeçalhos.
 3. **Valores para o Worker:**
-   - `ACCESS_AUD` e `ACCESS_TEAM_DOMAIN` não são segredos: entram como `vars` no `wrangler.jsonc`, por PR.
-   - O `ACCESS_AUD` é o AUD tag da aplicação.
-   - O `ACCESS_TEAM_DOMAIN` tem o formato `https://<equipe>.cloudflareaccess.com`.
-   - Quando entrarem no `wrangler.jsonc`, tire os dois de `src/env.d.ts`.
-4. **Client ID como secret:** `pnpm exec wrangler secret put ACCESS_CLIENT_ID` (digite o Client ID).
+   - `ACCESS_TEAM_DOMAIN` entra como `vars` no `wrangler.jsonc`, por PR. Tem o formato `https://<equipe>.cloudflareaccess.com`.
+   - `ACCESS_AUD` (o AUD tag da aplicação) é **secret** do Worker, gravado do `api.env` (`ACCESS_AUD=...`). Não é segredo de verdade, mas no `wrangler.jsonc` o gitleaks o barra, e não abrimos exceção no scanner (`docs/decisoes.md`).
+   - Valores atuais: team domain `https://survivus-services.cloudflareaccess.com`, aplicação `mail-api`.
+   - O `pnpm --filter @webmail/mail-core types` roda `wrangler types --strict-vars=false`: os `vars` viram `string`, e os testes podem trocar os valores.
+4. **Client ID e AUD como secrets**, igual ao 8.1, trocando a última linha por:
+
+   ```bash
+   printf '%s' "$CF_ACCESS_CLIENT_ID" | WRANGLER_SEND_METRICS=false pnpm exec wrangler secret put ACCESS_CLIENT_ID
+   printf '%s' "$ACCESS_AUD" | WRANGLER_SEND_METRICS=false pnpm exec wrangler secret put ACCESS_AUD
+   ```
 
 ### 8.4 Banco e deploy
 

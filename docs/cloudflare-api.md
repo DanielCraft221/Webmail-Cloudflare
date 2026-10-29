@@ -21,7 +21,7 @@ Fontes: [Service tokens](https://developers.cloudflare.com/cloudflare-one/identi
 - **O Client Secret aparece uma única vez.** Perdeu, gera outro.
 - O cliente manda os cabeçalhos `CF-Access-Client-Id` e `CF-Access-Client-Secret`.
 - A política da aplicação usa a ação **Service Auth**, incluindo só esse token. Sem Service Auth, o Access pede login de identidade.
-- Com a opção de autenticação estrita por service token ligada, uma falha responde **401 ou 403**, nunca um redirecionamento 302 para a tela de login. A página não diz qual é a resposta exata sem token nenhum: o teste real do PR 2 confirma.
+- Com a opção de autenticação estrita por service token ligada, uma falha responde **401 ou 403**, nunca um redirecionamento 302 para a tela de login. A página não diz qual é a resposta exata sem token nenhum. **Medido no PR 2:** sem cabeçalho, `403`. Com Service Token falso, `401`. Com a opção "Retorna a Resposta 401" da aplicação ligada, os dois casos dão `401`. A resposta do Access é `text/html`, com os cabeçalhos `cf-access-domain` e `cf-access-aud`.
 
 ### Validar o JWT no Worker
 

@@ -230,3 +230,11 @@ O tipo declarado pelo remetente só aparece nos metadados em JSON. O HTML do e-m
 **Decisão:** 100 pedidos por minuto por usuário, com o binding `ratelimits` (chave = ID do usuário), depois da autenticação.
 
 **Motivo:** limita o estrago de um webmail comprometido ou com defeito. O binding é aproximado e vale por local da Cloudflare (`docs/cloudflare-api.md`): é proteção contra abuso, não cota exata.
+
+## Nenhuma exceção no gitleaks
+
+**Decisão:** não usamos `gitleaks:allow` nem allowlist no `.gitleaks.toml`, a não ser com o "ok" explícito do Daniel. Um valor que o gitleaks barra fica fora do repositório, mesmo quando não é segredo.
+
+**Caso que motivou:** o `ACCESS_AUD` (AUD tag da aplicação do Access) foi barrado pela regra genérica de chaves. Ele não é segredo: o Access o devolve a qualquer um no cabeçalho `cf-access-aud`. Mesmo assim virou secret do Worker (`wrangler secret put`), e só o `ACCESS_TEAM_DOMAIN` ficou em `vars`.
+
+**Motivo:** cada exceção é um ponto cego permanente no scanner. Uma linha liberada hoje pode receber um segredo de verdade amanhã sem nenhum aviso.
