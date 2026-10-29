@@ -142,6 +142,7 @@ Regras:
 - **Fluxo de Pull Request:** nunca commite direto na `main`. Antes de começar, rode `git pull --ff-only` na `main`, crie um branch (`etapa-N/descricao`), faça os commits **neste servidor** (onde o hook do gitleaks roda), dê push no branch e me passe o link para eu abrir e revisar o PR. Eu faço o merge no GitHub. Depois do merge, volte para a `main` e rode `git pull --ff-only`.
 - Ao abrir o PR, liste em destaque se ele altera arquivos sensíveis: `CLAUDE.md`, `.github/workflows/*`, `lefthook.yml`, `.gitleaks.toml`, `.gitignore`, `.dockerignore`, `wrangler.jsonc`. Esses eu leio linha por linha.
 - Rode `pnpm lint`, `pnpm typecheck` e `pnpm test` antes de cada commit.
+- Nunca use `git commit --no-verify` nem desative hooks.
 - Não faça `git push --force` e não reescreva o histórico sem me perguntar.
 - **Ao fim de cada sessão** (ou quando eu disser "vamos parar"), atualize `docs/progresso.md` com: o que foi feito, o que falta e o próximo passo exato. Assim a próxima sessão começa sem perder contexto.
 - Ao terminar uma etapa: pare, mostre como testar cada critério de pronto e espere minha validação.
