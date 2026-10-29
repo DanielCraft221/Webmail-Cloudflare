@@ -106,6 +106,8 @@ else
     pass "GET /v1/messages/:id: metadata and body"
   else fail "GET /v1/messages/:id: expected 200 with metadata and body, got $s"; fi
   was_read=$(json 'str(d["isRead"]).lower()')
+  # The subject goes to $tmp, never to the screen or the command line.
+  json 'json.dumps({"q": (d["subject"] or "").strip()[:100]})' >"$tmp/search"
   att=$(json 'd["attachments"][0]["id"] if d["attachments"] else ""')
   att_size=$(json 'd["attachments"][0]["size"] if d["attachments"] else ""')
 
@@ -136,9 +138,22 @@ else
 
   s=$(patch_json "/v1/messages/$msg" '{"folder":"sent"}')
   if [ "$s" = 400 ]; then pass "PATCH folder=sent: 400"; else fail "PATCH folder=sent: expected 400, got $s"; fi
+
+  # 6. Search: the term goes in the body, so it never reaches a URL.
+  if ! grep -q '^{"q": ""}$' "$tmp/search"; then
+    s=$(req user "$user" POST /v1/search -H 'Content-Type: application/json' --data @"$tmp/search")
+    if [ "$s" = 200 ] && [ "$(json "'$msg' in [m['id'] for m in d['messages']]")" = True ]; then
+      pass "POST /v1/search: finds the message by its subject"
+    else fail "POST /v1/search: expected 200 with the message, got $s"; fi
+  else
+    skip "POST /v1/search: the message has no subject"
+  fi
+  s=$(req user "$user" GET "/v1/search?q=smoke")
+  if [ "$s" = 404 ]; then pass "GET /v1/search: 404 (term never in the URL)"
+  else fail "GET /v1/search: expected 404, got $s"; fi
 fi
 
-# 6. workers.dev stays off (needs the Wrangler token loaded, docs/cloudflare.md section 1).
+# 7. workers.dev stays off (needs the Wrangler token loaded, docs/cloudflare.md section 1).
 if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
   sub=$(curl -sS --max-time 30 --header @<(printf 'Authorization: Bearer %s\n' "$CLOUDFLARE_API_TOKEN") \
     "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" |

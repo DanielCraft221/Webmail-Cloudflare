@@ -238,3 +238,17 @@ O tipo declarado pelo remetente só aparece nos metadados em JSON. O HTML do e-m
 **Caso que motivou:** o `ACCESS_AUD` (AUD tag da aplicação do Access) foi barrado pela regra genérica de chaves. Ele não é segredo: o Access o devolve a qualquer um no cabeçalho `cf-access-aud`. Mesmo assim virou secret do Worker (`wrangler secret put`), e só o `ACCESS_TEAM_DOMAIN` ficou em `vars`.
 
 **Motivo:** cada exceção é um ponto cego permanente no scanner. Uma linha liberada hoje pode receber um segredo de verdade amanhã sem nenhum aviso.
+
+## Workers Logs desligados
+
+**Decisão:** o armazenamento dos Workers Logs fica desligado (`observability.enabled: false` e `logs.enabled: false` no `wrangler.jsonc`). O `wrangler tail` continua mostrando os logs ao vivo, sem guardar nada.
+
+**Motivo:** medido em 2026-10-29 (tarefa 8 da Etapa 3), a Cloudflare grava junto com cada `log()` os dados da invocação, mesmo com `invocation_logs: false`:
+- no evento de e-mail, `$workers.event.mailFrom` (o remetente completo do envelope), `$workers.event.rcptTo` e `$metadata.trigger`;
+- num pedido da API, `$workers.event.request.url` (a URL completa, com ids e query string).
+
+Não há opção para excluir esses campos. O `redact_query_string` do `wrangler.jsonc` só tira a query string da URL: não resolve o `mailFrom` nem os ids no caminho. A regra do projeto proíbe guardar o endereço completo, então o armazenamento sai.
+
+**Consequência na API:** a busca passou de `GET /v1/search?q=` para `POST /v1/search`, com o termo no corpo JSON. O termo nunca vai numa URL, que plataformas e proxies costumam registrar.
+
+**Depois:** um Tail Worker que receba os eventos do `mail-core` e guarde só os campos do nosso `log()` (`docs/progresso.md`, seção "Depois").

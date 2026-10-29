@@ -129,15 +129,13 @@ Lista as 20 últimas mensagens do D1 remoto: data, caixa, domínio do remetente,
 
 ## 7. Logs
 
-O `wrangler.jsonc` liga o `observability`, então os logs do Worker ficam guardados no painel em **Workers Logs**. Só os nossos `log()` são guardados: têm o UUID da mensagem, a caixa, o domínio do remetente, o tamanho e o status.
-
-Os *invocation logs* (o registro automático de cada execução) ficam **desligados** (`invocation_logs: false`). O evento de e-mail traz o remetente completo do envelope (`mailFrom`), e a regra do projeto proíbe guardar esse endereço.
+O armazenamento dos **Workers Logs está desligado** (`observability.enabled: false` e `logs.enabled: false` no `wrangler.jsonc`). Nada fica guardado no painel. Os nossos `log()` só aparecem ao vivo, no `wrangler tail`.
 
 **Medido em 2026-10-29 (tarefa 8 da Etapa 3): desligar os *invocation logs* não basta.** A Cloudflare acrescenta a cada `log()` os dados da invocação:
 - no evento de e-mail, `$workers.event.mailFrom` (remetente completo do envelope), `$workers.event.rcptTo` e `$metadata.trigger`;
 - num pedido da API, `$workers.event.request.url` (caminho com ids e query string).
 
-A documentação não tem opção para excluir esses campos. A retenção é de 7 dias. Decisão pendente em `docs/progresso.md`.
+A documentação não tem opção para excluir esses campos. Por isso o armazenamento foi desligado (`docs/decisoes.md`, "Workers Logs desligados"). O que foi guardado antes expira em 7 dias.
 
 Para acompanhar ao vivo:
 
@@ -233,6 +231,7 @@ Medido em 2026-10-29: o `wrangler deploy` manteve o Custom Domain criado pelo pa
 - só o Service Token, sem `X-Webmail-User`, ou com usuário inexistente: `401` do Worker;
 - caixas, leitura de uma mensagem e download de um anexo, com os cabeçalhos de download;
 - `PATCH` de lida, conferindo a contagem de não lidas, e `PATCH` com pasta inválida (`400`);
+- `POST /v1/search` acha a mensagem pelo assunto, e `GET /v1/search` dá `404`;
 - `workers.dev` desligado.
 
 Como funciona:

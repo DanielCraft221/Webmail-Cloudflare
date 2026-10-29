@@ -272,8 +272,10 @@ export function createApi(keys: AccessKeys): Hono<Api> {
     });
   });
 
-  app.get("/v1/search", async (c) => {
-    const query = schema.searchQuery.safeParse(c.req.query());
+  app.post("/v1/search", async (c) => {
+    const query = schema.searchBody.safeParse(
+      await c.req.json().catch(() => undefined),
+    );
     if (!query.success) return error(c, 400, "bad_request");
     // % and _ are text, not wildcards.
     const pattern = `%${query.data.q.replace(/[\\%_]/g, "\\$&")}%`;
