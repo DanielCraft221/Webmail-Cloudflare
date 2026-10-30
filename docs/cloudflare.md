@@ -131,6 +131,8 @@ Lista as 20 últimas mensagens do D1 remoto: data, caixa, domínio do remetente,
 
 O armazenamento dos **Workers Logs está desligado** (`observability.enabled: false` e `logs.enabled: false` no `wrangler.jsonc`). Nada fica guardado no painel. Os nossos `log()` só aparecem ao vivo, no `wrangler tail`.
 
+Medido depois do deploy de 2026-10-29 (versão `ccd940ec`): uma consulta pela API de Observability achou os 38 eventos de antes do deploy e nenhum depois, mesmo com pedidos à API e um e-mail recebido no intervalo.
+
 **Medido em 2026-10-29 (tarefa 8 da Etapa 3): desligar os *invocation logs* não basta.** A Cloudflare acrescenta a cada `log()` os dados da invocação:
 - no evento de e-mail, `$workers.event.mailFrom` (remetente completo do envelope), `$workers.event.rcptTo` e `$metadata.trigger`;
 - num pedido da API, `$workers.event.request.url` (caminho com ids e query string).
