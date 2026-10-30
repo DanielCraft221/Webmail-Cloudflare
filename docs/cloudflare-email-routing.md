@@ -115,4 +115,4 @@ O total de metadados de um objeto é de 8.192 bytes ([R2 limits](https://develop
 Pendentes:
 
 1. **`Authentication-Results` forjado com o `authserv-id` da Cloudflare:** pelo Gmail não dá para testar se a Cloudflare remove ou renomeia esse cabeçalho (RFC 8601, seção 5). Veja o reforço previsto antes da Etapa 6 em `decisoes.md`.
-2. **Workers Logs sem o remetente completo:** conferir no painel que nenhuma entrada guardada tem o `mailFrom` (os *invocation logs* estão desligados no `wrangler.jsonc`).
+2. ~~**Workers Logs sem o remetente completo**~~ **Resolvido na Etapa 3:** os Workers Logs guardavam o `mailFrom`, mesmo com os *invocation logs* desligados. O armazenamento foi desligado e, depois do deploy, nenhum evento novo foi guardado (`docs/decisoes.md`, "Workers Logs desligados").

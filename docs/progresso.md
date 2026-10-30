@@ -2,17 +2,18 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 3 (em andamento)
+## Etapa atual: 4 (não iniciada)
 
 ### Próximo passo
 
-Revisar e mergear o PR `etapa-3/logs` (Workers Logs desligados, busca por `POST`). Depois, na `main` atualizada e limpa, cada passo com "ok" antes:
-1. deploy;
-2. `scripts/smoke-api.sh`;
-3. e-mail de teste do Daniel, conferido com o `inbox:list`;
-4. controle positivo com o token `logs-check` (expira em 2026-10-30): nenhum evento novo guardado depois do deploy.
+Etapa 4 (envio para serviços: Email Sending em `mail.survivusmc.com`). O `docs/etapas/etapa-4.md` ainda não existe: Daniel escreve e coloca na pasta. Na próxima sessão: commitar o arquivo num branch, ler e apresentar o plano.
 
-Só então: Etapa 3 concluída, e o próximo passo passa a ser a Etapa 4.
+### Antes de começar
+
+- Revogar o token `logs-check` no painel (expira em 2026-11-01) e apagar `~/.config/cloudflare/logs-check.env`.
+- Opcional: `printf 'SMOKE_USER_ID=%s\n' b2a98933-aa45-4af9-b0f3-dd58c4283e7b >> ~/.config/webmail/api.env`, para o `smoke-api.sh` rodar sem variável na linha de comando.
+
+## Etapa 3: concluída (2026-10-29)
 
 ### Feito (2026-10-29)
 
@@ -67,10 +68,24 @@ Só então: Etapa 3 concluída, e o próximo passo passa a ser a Etapa 4.
   pnpm exec wrangler d1 time-travel restore webmail-db --bookmark=0000000d-00000000-00005113-3a1217d20dc99b47d1b81b2beffc1372
   ```
 
+### Feito (2026-10-29, logs e conclusão)
+
+- PR `etapa-3/fechamento` mergeado: `scripts/smoke-api.sh` e os resultados das tarefas 7 e 8.
+- PR `etapa-3/logs` mergeado:
+  - armazenamento dos Workers Logs desligado (`observability.enabled: false`, `logs.enabled: false`);
+  - busca passou para `POST /v1/search`, com o termo no corpo;
+  - decisão em `docs/decisoes.md`.
+- **Deploy:** versão `ccd940ec-66b4-4467-976a-c5d31f08a499`, às 21:25:10Z. A anterior, para rollback, é `1ddd2b98-76ea-4f7a-b152-f6638efe5417`. Depois do deploy, a API da Cloudflare mostra `observability: None` nas configurações do `mail-core`.
+- **`smoke-api.sh`:** 13 PASS, incluindo `POST /v1/search` e `GET /v1/search` = `404`.
+- **E-mail de teste** para `contato@` às 21:28:34Z: `parse_status` `ok`, com `spf`, `dkim` e `dmarc` = `pass`.
+- **Tarefa 8, controle positivo depois do deploy** (token `logs-check`):
+  - De 29/10 00:00Z até o deploy: 38 eventos guardados (`api_request` 36, `queued` 1, `ingested` 1). A consulta funciona.
+  - Do deploy até 30/10 00:28Z: **0 eventos**. Nesse intervalo houve uns 20 pedidos do smoke e o e-mail de teste, então nenhum `queued`, `ingested` ou `api_request` novo foi guardado.
+  - Os eventos antigos, com `mailFrom`, expiram pela retenção de 7 dias, até 2026-11-05.
+
 ### Falta
 
-- **Tarefa 8:** decidido desligar o armazenamento dos Workers Logs (PR `etapa-3/logs`). Falta o deploy e a prova de que nada novo é guardado. Depois, revogar o token `logs-check` (expira em 2026-10-30) e apagar `~/.config/cloudflare/logs-check.env`.
-- Com a decisão aplicada: marcar a Etapa 3 como concluída.
+- _(nada da Etapa 3)_. Verificação que continua aberta, de antes: `Authentication-Results` forjado com o `authserv-id` da Cloudflare (`docs/cloudflare-email-routing.md`).
 
 ### Avisos para a Etapa 3
 
