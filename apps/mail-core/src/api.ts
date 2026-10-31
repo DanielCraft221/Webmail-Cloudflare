@@ -45,6 +45,17 @@ type AttachmentRow = {
   is_inline: number;
 };
 
+/** Called by the webmail with the internal token but without X-Webmail-User: nobody is logged in yet. */
+const SERVICE_ROUTES = new Set([
+  "/v1/auth/lookup",
+  "/v1/auth/setup/lookup",
+  "/v1/auth/setup/complete",
+  "/v1/audit",
+]);
+
+const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+const SETUP_EXPIRES = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+24 hours')";
+
 const SUMMARY_COLUMNS = `m.id, m.mailbox_id, m.folder, m.from_address, m.from_name, m.subject, m.snippet,
   m.header_date, m.received_at, m.size, m.has_attachments, m.spf, m.dkim, m.dmarc, m.is_read, m.parse_status`;
 
@@ -84,25 +95,35 @@ export function createApi(keys: AccessKeys): Hono<Api> {
     );
     if (!jwtOk) return error(c, 401, "unauthorized");
 
+    // Decided by the matched route pattern, never by the raw path: an encoded or doubled
+    // slash cannot change the group. Unknown routes get the strictest group and end in 404.
+    const route = routePath(c, -1);
+    const group = route.startsWith("/v1/admin/")
+      ? "admin"
+      : SERVICE_ROUTES.has(route)
+        ? "service"
+        : "user";
+    const expected =
+      group === "admin" ? env.ADMIN_API_TOKEN : env.INTERNAL_API_TOKEN;
     const bearer = /^Bearer (\S+)$/.exec(c.req.header("Authorization") ?? "");
-    if (
-      !bearer?.[1] ||
-      !env.INTERNAL_API_TOKEN ||
-      !(await sameSecret(bearer[1], env.INTERNAL_API_TOKEN))
-    )
+    if (!bearer?.[1] || !expected || !(await sameSecret(bearer[1], expected)))
       return error(c, 401, "unauthorized");
 
-    const userId = schema.messageId.safeParse(c.req.header("X-Webmail-User"));
-    if (!userId.success) return error(c, 401, "unauthorized");
-    const user = await env.DB.prepare(
-      "SELECT id FROM users WHERE id = ?1 AND active = 1",
-    )
-      .bind(userId.data)
-      .first<{ id: string }>();
-    if (!user) return error(c, 401, "unauthorized");
-    c.set("userId", user.id);
+    let rateKey: string = group;
+    if (group === "user") {
+      const userId = schema.messageId.safeParse(c.req.header("X-Webmail-User"));
+      if (!userId.success) return error(c, 401, "unauthorized");
+      const user = await env.DB.prepare(
+        "SELECT id FROM users WHERE id = ?1 AND active = 1",
+      )
+        .bind(userId.data)
+        .first<{ id: string }>();
+      if (!user) return error(c, 401, "unauthorized");
+      c.set("userId", user.id);
+      rateKey = user.id;
+    }
 
-    const { success } = await env.API_RATE_LIMIT.limit({ key: user.id });
+    const { success } = await env.API_RATE_LIMIT.limit({ key: rateKey });
     if (!success) return error(c, 429, "rate_limited");
     await next();
   });
@@ -293,6 +314,227 @@ export function createApi(keys: AccessKeys): Hono<Api> {
     return c.json({ messages: results.map(summary) });
   });
 
+  // --- Authentication: the webmail verifies password and code itself (docs/webmail-auth.md) ---
+
+  // The only response that carries a password hash and the encrypted TOTP secret: it exists for that.
+  app.post("/v1/auth/lookup", async (c) => {
+    const body = await jsonBody(c, schema.authLookupBody);
+    if (!body.success) return error(c, 400, "bad_request");
+    const user = await c.env.DB.prepare(
+      `SELECT id, active, role, password_hash, totp_secret_enc FROM users WHERE username = ?1`,
+    )
+      .bind(body.data.username)
+      .first<{
+        id: string;
+        active: number;
+        role: string;
+        password_hash: string | null;
+        totp_secret_enc: string | null;
+      }>();
+    if (!user) return error(c, 404, "not_found");
+    return c.json({
+      id: user.id,
+      active: user.active === 1,
+      role: user.role,
+      passwordHash: user.password_hash,
+      totpSecretEnc: user.totp_secret_enc,
+    });
+  });
+
+  app.post("/v1/auth/setup/lookup", async (c) => {
+    const body = await jsonBody(c, schema.setupLookupBody);
+    if (!body.success) return error(c, 400, "bad_request");
+    const user = await c.env.DB.prepare(
+      `SELECT id, username FROM users
+       WHERE setup_token_hash = ?1 AND setup_expires_at > ${NOW} AND active = 1`,
+    )
+      .bind(body.data.tokenHash)
+      .first<{ id: string; username: string }>();
+    if (!user) return error(c, 404, "not_found");
+    return c.json(user);
+  });
+
+  // One conditional UPDATE: of two concurrent calls with the same link, only one matches a row.
+  app.post("/v1/auth/setup/complete", async (c) => {
+    const body = await jsonBody(c, schema.setupCompleteBody);
+    if (!body.success) return error(c, 400, "bad_request");
+    const user = await c.env.DB.prepare(
+      `UPDATE users SET password_hash = ?2, totp_secret_enc = ?3, setup_token_hash = NULL,
+         setup_expires_at = NULL, updated_at = ${NOW}
+       WHERE setup_token_hash = ?1 AND setup_expires_at > ${NOW} AND active = 1
+       RETURNING id, username`,
+    )
+      .bind(
+        body.data.tokenHash,
+        body.data.passwordHash,
+        body.data.totpSecretEnc,
+      )
+      .first<{ id: string; username: string }>();
+    if (!user) return error(c, 404, "not_found");
+    return c.json(user);
+  });
+
+  app.get("/v1/me", async (c) => {
+    const user = await c.env.DB.prepare(
+      "SELECT id, username, display_name, role FROM users WHERE id = ?1",
+    )
+      .bind(c.get("userId"))
+      .first<{
+        id: string;
+        username: string;
+        display_name: string | null;
+        role: string;
+      }>();
+    if (!user) return error(c, 401, "unauthorized");
+    return c.json({
+      id: user.id,
+      username: user.username,
+      displayName: user.display_name,
+      role: user.role,
+    });
+  });
+
+  app.post("/v1/audit", async (c) => {
+    const body = await jsonBody(c, schema.webmailAuditBody);
+    if (!body.success) return error(c, 400, "bad_request");
+    const { action, actorUserId, target, ip, detail } = body.data;
+    // An unknown actor id is stored as NULL instead of failing the foreign key.
+    await c.env.DB.prepare(
+      `INSERT INTO audit_log (source, actor_user_id, action, target, ip, detail)
+       VALUES ('webmail', (SELECT id FROM users WHERE id = ?1), ?2, ?3, ?4, ?5)`,
+    )
+      .bind(
+        actorUserId ?? null,
+        action,
+        target ?? null,
+        ip ?? null,
+        detail ? JSON.stringify(detail) : null,
+      )
+      .run();
+    return c.body(null, 204);
+  });
+
+  // --- Administration: ADMIN_API_TOKEN only, used by the CLI. Every route writes to audit_log ---
+
+  app.get("/v1/admin/users", async (c) => {
+    const { results } = await c.env.DB.prepare(
+      `SELECT ${ADMIN_USER_COLUMNS} FROM users ORDER BY username`,
+    ).all<AdminUserRow>();
+    await cliAudit(c, "user_list").run();
+    return c.json({ users: results.map(adminUser) });
+  });
+
+  app.post("/v1/admin/users", async (c) => {
+    const body = await jsonBody(c, schema.createUserBody);
+    if (!body.success) return error(c, 400, "bad_request");
+    const { username, role, displayName, setupTokenHash } = body.data;
+    const id = crypto.randomUUID();
+    try {
+      const [created] = await c.env.DB.batch([
+        c.env.DB.prepare(
+          `INSERT INTO users (id, username, display_name, role, setup_token_hash, setup_expires_at, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ${SETUP_EXPIRES}, ${NOW})
+           RETURNING ${ADMIN_USER_COLUMNS}`,
+        ).bind(id, username, displayName ?? null, role, setupTokenHash),
+        cliAudit(c, "user_create", { userId: id, detail: { username, role } }),
+      ]);
+      const row = created?.results[0] as AdminUserRow;
+      return c.json(adminUser(row), 201);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("UNIQUE constraint"))
+        return error(c, 409, "conflict");
+      throw err;
+    }
+  });
+
+  app.post("/v1/admin/users/:id/reset", async (c) => {
+    const id = schema.messageId.safeParse(c.req.param("id"));
+    if (!id.success) return error(c, 404, "not_found");
+    const body = await jsonBody(c, schema.resetUserBody);
+    if (!body.success) return error(c, 400, "bad_request");
+    const [updated] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE users SET password_hash = NULL, totp_secret_enc = NULL, setup_token_hash = ?2,
+           setup_expires_at = ${SETUP_EXPIRES}, updated_at = ${NOW}
+         WHERE id = ?1 RETURNING ${ADMIN_USER_COLUMNS}`,
+      ).bind(id.data, body.data.setupTokenHash),
+      cliAudit(c, "user_reset", { userId: id.data }),
+    ]);
+    const row = updated?.results[0] as AdminUserRow | undefined;
+    if (!row) return error(c, 404, "not_found");
+    return c.json(adminUser(row));
+  });
+
+  app.patch("/v1/admin/users/:id", async (c) => {
+    const id = schema.messageId.safeParse(c.req.param("id"));
+    if (!id.success) return error(c, 404, "not_found");
+    const body = await jsonBody(c, schema.patchUserBody);
+    if (!body.success) return error(c, 400, "bad_request");
+    const { active, role, displayName } = body.data;
+    const [updated] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE users SET active = COALESCE(?2, active), role = COALESCE(?3, role),
+           display_name = CASE WHEN ?4 THEN ?5 ELSE display_name END, updated_at = ${NOW}
+         WHERE id = ?1 RETURNING ${ADMIN_USER_COLUMNS}`,
+      ).bind(
+        id.data,
+        active === undefined ? null : Number(active),
+        role ?? null,
+        Number(displayName !== undefined),
+        displayName ?? null,
+      ),
+      cliAudit(c, "user_update", { userId: id.data, detail: body.data }),
+    ]);
+    const row = updated?.results[0] as AdminUserRow | undefined;
+    if (!row) return error(c, 404, "not_found");
+    return c.json(adminUser(row));
+  });
+
+  app.get("/v1/admin/audit", async (c) => {
+    const query = schema.auditListQuery.safeParse(c.req.query());
+    if (!query.success) return error(c, 400, "bad_request");
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, created_at, source, actor_user_id, action, target, ip, detail
+       FROM audit_log ORDER BY created_at DESC, id DESC LIMIT ?1`,
+    )
+      .bind(query.data.limit)
+      .all<{
+        id: number;
+        created_at: string;
+        source: string;
+        actor_user_id: string | null;
+        action: string;
+        target: string | null;
+        ip: string | null;
+        detail: string | null;
+      }>();
+    await cliAudit(c, "audit_list").run();
+    return c.json({
+      events: results.map((e) => ({
+        id: e.id,
+        createdAt: e.created_at,
+        source: e.source,
+        actorUserId: e.actor_user_id,
+        action: e.action,
+        target: e.target,
+        ip: e.ip,
+        detail: e.detail ? JSON.parse(e.detail) : null,
+      })),
+    });
+  });
+
+  // Local CLI actions (sessions and bans in the webmail's SQLite) still belong in the D1 audit log.
+  app.post("/v1/admin/audit", async (c) => {
+    const body = await jsonBody(c, schema.cliAuditBody);
+    if (!body.success) return error(c, 400, "bad_request");
+    const { action, target, detail } = body.data;
+    await cliAudit(c, action, {
+      ...(target ? { target } : {}),
+      ...(detail ? { detail } : {}),
+    }).run();
+    return c.body(null, 204);
+  });
+
   app.notFound((c) => error(c, 404, "not_found"));
   app.onError((err, c) => {
     log({ event: "api_error", error: errorName(err) });
@@ -304,10 +546,80 @@ export function createApi(keys: AccessKeys): Hono<Api> {
 
 function error(
   c: Context<Api>,
-  status: 400 | 401 | 404 | 429 | 500,
+  status: 400 | 401 | 404 | 409 | 429 | 500,
   code: string,
 ) {
   return c.json({ error: code }, status);
+}
+
+function jsonBody<R>(
+  c: Context<Api>,
+  schema: { safeParse(data: unknown): R },
+): Promise<R> {
+  return c.req
+    .json()
+    .catch(() => undefined)
+    .then((data) => schema.safeParse(data));
+}
+
+/** Never the hash, the TOTP secret or the setup token hash: only whether they exist. */
+const ADMIN_USER_COLUMNS = `id, username, display_name, role, active,
+  password_hash IS NOT NULL AS has_password, totp_secret_enc IS NOT NULL AS has_totp,
+  CASE WHEN setup_expires_at > ${NOW} THEN setup_expires_at END AS setup_expires_at,
+  created_at, updated_at`;
+
+type AdminUserRow = {
+  id: string;
+  username: string;
+  display_name: string | null;
+  role: string;
+  active: number;
+  has_password: number;
+  has_totp: number;
+  setup_expires_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+function adminUser(u: AdminUserRow) {
+  return {
+    id: u.id,
+    username: u.username,
+    displayName: u.display_name,
+    role: u.role,
+    active: u.active === 1,
+    hasPassword: u.has_password === 1,
+    hasTotp: u.has_totp === 1,
+    setupExpiresAt: u.setup_expires_at,
+    createdAt: u.created_at,
+    updatedAt: u.updated_at,
+  };
+}
+
+/**
+ * An audit event from the CLI. With `userId`, the event targets that user and is written only
+ * if the user exists, so in a batch after an UPDATE it records only a change that happened.
+ */
+function cliAudit(
+  c: Context<Api>,
+  action: string,
+  options: {
+    userId?: string;
+    target?: string;
+    detail?: Record<string, unknown>;
+  } = {},
+): D1PreparedStatement {
+  const header = schema.ip.safeParse(c.req.header("CF-Connecting-IP"));
+  const ip = header.success ? header.data : null;
+  const detail = options.detail ? JSON.stringify(options.detail) : null;
+  if (options.userId)
+    return c.env.DB.prepare(
+      `INSERT INTO audit_log (source, action, target, ip, detail)
+       SELECT 'cli', ?1, id, ?2, ?3 FROM users WHERE id = ?4`,
+    ).bind(action, ip, detail, options.userId);
+  return c.env.DB.prepare(
+    `INSERT INTO audit_log (source, action, target, ip, detail) VALUES ('cli', ?1, ?2, ?3, ?4)`,
+  ).bind(action, options.target ?? null, ip, detail);
 }
 
 async function sameSecret(given: string, expected: string): Promise<boolean> {
