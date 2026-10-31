@@ -266,4 +266,5 @@ Não há opção para excluir esses campos. O `redact_query_string` do `wrangler
 **Também decidido:**
 - DMARC de `mail.survivusmc.com`: fica o `p=reject` criado pelo onboarding, com o `rua` do DMARC Management (o mesmo do domínio principal). A etapa sugeria começar com `p=none`. Como o subdomínio só envia pela Cloudflare e o teste mostrou DMARC `pass` alinhado, não há motivo para afrouxar.
 - *Drop suppressed recipients* desligado (padrão). Ligado, um envio para um destinatário suprimido responde `250` sem entregar nada. Desligado, o nLogin recebe o erro.
+- *Email preview* desligado em `mail.survivusmc.com`: ele guardaria por cerca de 7 dias o conteúdo das mensagens, incluindo os códigos de recuperação. Ele só é ligado por pouco tempo, para depurar.
 - Sem assinatura DKIM pelo domínio principal (`d=survivusmc.com`), só para o Gmail mostrar "assinado por: survivusmc.com". O ganho seria só visual, e o DMARC já passa com `mail.survivusmc.com`.
