@@ -183,7 +183,7 @@ Ideias que ainda não entraram no roteiro.
 - Alerta quando chegar mensagem na DLQ `mail-ingest-dlq`.
 - Limpeza das duplicatas em `dup/` no R2 (hoje ficam para sempre). O reprocessamento acima deve ignorar `dup/`.
 - `shellcheck` no CI, para os scripts em `scripts/`.
-- Relay interno de envio. Prevista para a Etapa 12, mas sobe antes se o nLogin não tiver cooldown de recuperação (`docs/smtp-servicos.md`):
+- Relay interno de envio. Previsto para a Etapa 12, mas sobe antes se o nLogin não tiver cooldown de recuperação (`docs/smtp-servicos.md`):
   - container próprio `mail-relay`, separado do webmail, sem portas publicadas;
   - redes: a do Minecraft, depois a do NodeBB, e uma de saída própria. Nunca a rede do webmail;
   - uma credencial do relay por serviço, com remetente fixo;
