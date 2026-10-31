@@ -8,14 +8,26 @@ Contrato que o webmail segue (Etapas 5 e 6). A API é usada **só pelo webmail**
 
 ## Autenticação: todo pedido em `/v1/*`
 
-O webmail manda **quatro** cabeçalhos em todo pedido:
+Os pedidos levam até **quatro** cabeçalhos:
 
 | Cabeçalho | Valor | Quem confere |
 | --- | --- | --- |
 | `CF-Access-Client-Id` | Client ID do Service Token `webmail` | Cloudflare Access, na borda |
 | `CF-Access-Client-Secret` | Client Secret do Service Token | Cloudflare Access, na borda |
-| `Authorization` | `Bearer <INTERNAL_API_TOKEN>` | Worker |
-| `X-Webmail-User` | UUID do usuário logado no webmail | Worker, no D1 |
+| `Authorization` | `Bearer <token do grupo da rota>` (tabela abaixo) | Worker |
+| `X-Webmail-User` | UUID do usuário logado no webmail (só no grupo "usuário") | Worker, no D1 |
+
+**Três grupos de rotas** (Etapa 5). Cada token abre só o próprio grupo:
+
+| Grupo | Rotas | Bearer | `X-Webmail-User` | Rate limit (chave) |
+| --- | --- | --- | --- | --- |
+| Usuário | caixas, mensagens, busca e `GET /v1/me` | `INTERNAL_API_TOKEN` | obrigatório | o UUID do usuário |
+| Serviço | `/v1/auth/*` e `POST /v1/audit` | `INTERNAL_API_TOKEN` | não usado | `service` |
+| Administração | `/v1/admin/*` | `ADMIN_API_TOKEN` | não usado | `admin` |
+
+- O `INTERNAL_API_TOKEN` (webmail) **nunca** abre `/v1/admin/*`. O `ADMIN_API_TOKEN` (só a CLI) **não abre** as outras rotas. **O webmail nunca recebe o `ADMIN_API_TOKEN`.**
+- O grupo é decidido pelo **padrão da rota casada** no roteador, nunca pelo texto da URL: um `%61dmin` ou uma barra dupla não mudam o grupo. Um caminho que não casa com rota nenhuma cai no grupo "usuário" (o mais fechado) e termina em 404.
+- O Service Token do Access é o mesmo nos três grupos.
 
 Sem o Service Token (ou com um falso), o Access barra o pedido antes do Worker com `401` em `text/html` e o cabeçalho `cf-access-domain`. O `401` do Worker é sempre JSON. O webmail deve tratar os dois como falha de configuração, não como sessão expirada do usuário. Com o Service Token, o Access acrescenta o `Cf-Access-Jwt-Assertion`, e o Worker confere, nesta ordem:
 
@@ -26,11 +38,11 @@ Sem o Service Token (ou com um falso), o Access barra o pedido antes do Worker c
    - `exp` obrigatório;
    - `exp` e `nbf` com no máximo 60 s de tolerância de relógio;
    - `common_name` igual ao Client ID esperado.
-2. **Bearer**, comparado em tempo constante.
-3. **Usuário:** `X-Webmail-User` é um UUID de um usuário existente e ativo.
-4. **Rate limit:** 100 pedidos por minuto por usuário (aproximado, por local da Cloudflare).
+2. **Bearer** do grupo da rota, comparado em tempo constante.
+3. **Usuário** (só no grupo "usuário"): `X-Webmail-User` é um UUID de um usuário existente e ativo.
+4. **Rate limit:** 100 pedidos por minuto por chave (aproximado, por local da Cloudflare).
 
-As falhas de 1 a 3 respondem `401 {"error":"unauthorized"}`, sem dizer qual passo falhou. Se faltar qualquer configuração (`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `ACCESS_CLIENT_ID`, `INTERNAL_API_TOKEN`), todo pedido responde 401: a API fecha, não abre.
+As falhas de 1 a 3 respondem `401 {"error":"unauthorized"}`, sem dizer qual passo falhou. Se faltar qualquer configuração (`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `ACCESS_CLIENT_ID`, `INTERNAL_API_TOKEN`, `ADMIN_API_TOKEN`), os pedidos do grupo afetado respondem 401: a API fecha, não abre.
 
 **O `X-Webmail-User` só identifica.** Ele nunca dá permissão: toda rota confere no D1 (`user_mailboxes.can_read`) se esse usuário lê a caixa.
 
@@ -60,9 +72,10 @@ Testes reais com `curl` depois do deploy (versão `1ddd2b98-76ea-4f7a-b152-f6638
 
 | Status | Corpo | Quando |
 | --- | --- | --- |
-| 400 | `{"error":"bad_request"}` | Parâmetro de paginação, corpo da busca ou corpo do `PATCH` inválido |
+| 400 | `{"error":"bad_request"}` | Parâmetro ou corpo inválido (campo a mais também é inválido) |
 | 401 | `{"error":"unauthorized"}` | Autenticação (acima) |
 | 404 | `{"error":"not_found"}` | Recurso inexistente, ID malformado **ou sem permissão**. As três respostas são idênticas |
+| 409 | `{"error":"conflict"}` | `POST /v1/admin/users` com username já existente |
 | 429 | `{"error":"rate_limited"}` | Rate limit |
 | 500 | `{"error":"internal_error"}` | Erro interno. Nunca traz detalhe nem stack trace |
 
@@ -220,10 +233,110 @@ JSON inválido, campo desconhecido ou tipo errado: 400.
 
 No máximo 50 resultados, do mais novo para o mais antigo. A comparação ignora maiúsculas só em letras sem acento (limite do `LIKE` do SQLite).
 
+### `GET /v1/me` (grupo usuário)
+
+O usuário do `X-Webmail-User`. O webmail usa para revalidar a sessão (no máximo a cada 5 minutos). Usuário desativado ou apagado: `401`, e o webmail apaga a sessão.
+
+```json
+{ "id": "uuid", "username": "danielcraft221", "displayName": "Daniel", "role": "admin" }
+```
+
+## Rotas de autenticação (grupo serviço, Etapa 5)
+
+**O webmail verifica a senha e o código**, não o Worker (`docs/webmail-auth.md`). O Worker só guarda e devolve. Schemas de pedido e de resposta em `packages/shared/src/api.ts`.
+
+Formatos aceitos:
+- `username`: `^[a-z0-9][a-z0-9._-]{0,63}$`. O webmail normaliza para minúsculas antes de chamar.
+- `tokenHash`: SHA-256 em hexadecimal minúsculo (64 caracteres) do token do link. **O token nunca chega à API.**
+- `passwordHash`: string PHC do argon2id (`$argon2id$v=19$m=…,t=…,p=…$sal$hash`).
+- `totpSecretEnc`: `v1.<iv>.<cifra+tag>`, em base64url. A API trata como opaco: só o webmail tem a chave.
+
+### `POST /v1/auth/lookup`
+
+Corpo: `{"username":"…"}` (no corpo, nunca na URL). **É a única resposta da API com o hash da senha e o segredo cifrado**: ela existe para isso.
+
+```json
+{ "id": "uuid", "active": true, "role": "admin", "passwordHash": "$argon2id$…", "totpSecretEnc": "v1.…" }
+```
+
+- Usuário inexistente: `404 {"error":"not_found"}`.
+- `passwordHash` ou `totpSecretEnc` `null`: configuração pendente. **O webmail nunca deixa entrar**, mesmo com `active: true`.
+
+### `POST /v1/auth/setup/lookup`
+
+Corpo: `{"tokenHash":"…"}`. Link válido, não expirado e de usuário ativo: `{"id":"uuid","username":"…"}`. Qualquer outro caso: `404`.
+
+### `POST /v1/auth/setup/complete`
+
+Corpo: `{"tokenHash":"…","passwordHash":"…","totpSecretEnc":"…"}`.
+
+- Grava a senha e o segredo e **apaga o link**, num único `UPDATE` condicional (link igual, não expirado, usuário ativo). Resposta: `{"id":"uuid","username":"…"}`.
+- Link usado, expirado ou inexistente: `404`. Com duas chamadas ao mesmo tempo para o mesmo link, só uma grava; a outra recebe `404`.
+
+### `POST /v1/audit`
+
+Grava um evento do webmail no `audit_log`, com `source = "webmail"` (definido pelo token, nunca pelo corpo). Resposta: `204`.
+
+```json
+{ "action": "login_failure", "actorUserId": "uuid ou null", "target": "…", "ip": "2001:db8::1", "detail": { "reason": "bad_code" } }
+```
+
+- `action`: `login_success`, `login_failure`, `logout`, `ip_ban`, `username_lock` ou `setup_complete`. Só `action` é obrigatório.
+- `actorUserId` desconhecido vira `null`. `target` tem até 100 caracteres. `ip` é IPv4 ou IPv6.
+- `target`, os textos de `detail` e o `displayName` (rotas de admin) recusam caracteres de controle e de formatação (`\p{Cc}`, `\p{Cf}`): eles são impressos no terminal pela CLI, e uma sequência ANSI poderia apagar ou forjar linhas.
+- `detail`: objeto plano, até 10 chaves, valores texto (até 100 caracteres), número, booleano ou `null`, até 500 caracteres no total. **Nunca senha, código, token ou cookie.** Tentativa com username inexistente não manda o username digitado.
+
+## Rotas de administração (grupo administração, Etapa 5)
+
+Usadas só pela CLI (`pnpm admin`). **Toda rota grava no `audit_log`**, com `source = "cli"`, `actor_user_id` vazio e o IP do `CF-Connecting-IP`. Nas rotas que mudam um usuário, o evento é gravado na mesma transação da mudança, e só se o usuário existir. Nenhuma resposta traz hash, segredo ou token.
+
+**Usuário** (`AdminUser`):
+
+```json
+{
+  "id": "uuid", "username": "ana", "displayName": "Ana", "role": "user", "active": true,
+  "hasPassword": false, "hasTotp": false, "setupExpiresAt": "2026-11-01T20:00:00.000Z",
+  "createdAt": "…", "updatedAt": "…"
+}
+```
+
+`setupExpiresAt` é `null` quando não há link válido.
+
+### `GET /v1/admin/users`
+
+`{"users":[AdminUser…]}`, por username. Evento: `user_list`.
+
+### `POST /v1/admin/users`
+
+Corpo: `{"username":"ana","role":"user","displayName":"Ana","setupTokenHash":"…"}` (`role` padrão `user`; `displayName` opcional). A CLI gera o token do link e manda só o hash. **A validade (24 h) é definida pelo Worker**, não pela CLI.
+
+- `201` com `AdminUser`. Username repetido: `409`.
+- Evento: `user_create`, com `{username, role}`.
+
+### `POST /v1/admin/users/:id/reset`
+
+Corpo: `{"setupTokenHash":"…"}`. Apaga a senha e o segredo TOTP e grava o novo link (24 h). `200` com `AdminUser`; id inexistente ou malformado: `404`. Evento: `user_reset`. As sessões locais do webmail são derrubadas pela própria CLI.
+
+### `PATCH /v1/admin/users/:id`
+
+Corpo com ao menos um de: `active` (booleano), `role` (`admin`/`user`), `displayName` (texto ou `null`). `200` com `AdminUser`; `404` se não existir. Evento: `user_update`, com os campos mudados. Usuário desativado recebe `401` em toda rota do grupo usuário a partir do próximo pedido.
+
+### `GET /v1/admin/audit?limit=`
+
+Últimos eventos, do mais novo ao mais antigo. `limit` de 1 a 500, padrão 50. Evento: `audit_list`.
+
+```json
+{ "events": [ { "id": 1, "createdAt": "…", "source": "webmail", "actorUserId": "uuid", "action": "login_success", "target": null, "ip": "…", "detail": { "reason": "ok" } } ] }
+```
+
+### `POST /v1/admin/audit`
+
+Ações locais da CLI (sessões e bans ficam no SQLite do webmail), para irem ao mesmo `audit_log`. Corpo: `{"action":"…","target":"…","detail":{…}}`, com `action` = `session_revoke`, `ip_ban`, `ip_unban` ou `username_unlock`. Resposta: `204`. Ações do webmail (`login_success` etc.) são recusadas com `400`.
+
 ## Logs
 
 Cada pedido gera uma linha com:
-- `user`: o UUID, só depois de autenticado;
+- `user`: o UUID, só no grupo usuário e depois de autenticado;
 - `route`: método e padrão da rota, por exemplo `GET /v1/messages/:id`;
 - `httpStatus`;
 - `ms`.

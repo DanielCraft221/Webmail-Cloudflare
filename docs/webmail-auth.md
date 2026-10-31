@@ -25,7 +25,7 @@ Fonte: [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/c
 
 Mínimos da OWASP, todos equivalentes entre si: `m=47104` (46 MiB) com `t=1`; `m=19456` (19 MiB) com `t=2`; `m=12288` com `t=3`; `m=9216` com `t=4`; `m=7168` com `t=5`. Sempre com `p=1`.
 
-**Sem dependência:** o Node 24 tem argon2id nativo (`crypto.argon2`, desde o 24.7). O formato guardado é o PHC padrão (`$argon2id$v=19$m=…,t=…,p=…$sal$hash`), que leva os parâmetros junto: dá para subir o custo depois sem invalidar senhas antigas.
+**Sem dependência:** o Node 24 tem argon2id nativo (`crypto.argon2` e `crypto.argon2Sync`, adicionados na v24.7.0). **Estabilidade:** a seção não tem marcador próprio, então herda o do módulo `node:crypto`, "*Stability: 2 - Stable*" (conferido no [código-fonte da documentação do Node 24](https://github.com/nodejs/node/blob/v24.x/doc/api/crypto.md) em 2026-10-31). Mesmo assim, o PR 3 tem um teste com um valor conhecido: se a API mudar, ele quebra. O formato guardado é o PHC padrão (`$argon2id$v=19$m=…,t=…,p=…$sal$hash`), que leva os parâmetros junto: dá para subir o custo depois sem invalidar senhas antigas.
 
 Medido neste servidor (Intel i5-4590, 4 núcleos, 16 GB) em 2026-10-31, com Node 24.22.1, mediana de 5 execuções:
 
@@ -70,3 +70,26 @@ Fonte: [calendário oficial](https://github.com/nodejs/Release/blob/main/schedul
 
 - O **Node 26 é a LTS ativa desde 2026-10-28**. O 24, que o projeto usa hoje (24.22.1 no servidor, `engines` no `package.json`), entrou em manutenção e recebe só correções de segurança até 2028-04-30.
 - A Etapa 7 usa no Dockerfile a mesma versão do desenvolvimento.
+
+## Fluxos
+
+### Primeiro acesso e reset (link de configuração)
+
+1. A CLI (`user:create` ou `user:reset`) gera um token aleatório, manda **só o SHA-256 dele** ao Worker (`POST /v1/admin/users` ou `/reset`) e mostra o link `/setup/<token>` uma única vez. O Worker define a validade de 24 h. O reset também apaga a senha e o segredo TOTP no D1 e a CLI derruba as sessões locais.
+2. Daniel manda o link à pessoa por um canal seguro.
+3. A pessoa abre o link. O webmail calcula o SHA-256 do token e chama `POST /v1/auth/setup/lookup`. Inválido, usado ou expirado: a página diz só que o link não vale.
+4. Ela define a senha (12 a 128 caracteres, diferente do username). O webmail gera o segredo TOTP, guarda os dois **em andamento no SQLite local por até 10 minutos** e mostra o QR code (gerado no servidor, imagem `data:`) e o segredo em texto.
+5. Ela confirma um código. Só então o webmail calcula o argon2id, cifra o segredo (AES-256-GCM, AAD = id do usuário) e chama `POST /v1/auth/setup/complete`, que grava tudo e apaga o link numa única operação.
+
+### Login
+
+1. **Ban do IP checado primeiro** (IPv6 pelo `/64`), antes de ler o corpo e antes do argon2.
+2. Username bloqueado por excesso de falhas: recusa sem argon2, com a mensagem genérica.
+3. `POST /v1/auth/lookup`. Usuário inexistente: verificação contra o hash falso, para gastar o mesmo tempo.
+4. Recusa se o usuário estiver inativo ou sem senha ou sem 2FA.
+5. argon2id (no máximo 2 ao mesmo tempo; além disso, `503`), depois o código TOTP (±1 passo, nunca um passo já usado).
+6. Qualquer falha: "Usuário, senha ou código inválidos", contada para o IP e para o username, e gravada no `audit_log` com o motivo interno. Sucesso: sessão nova (cookie com token de 32 bytes; o SQLite guarda só o SHA-256).
+
+### Formato do segredo cifrado
+
+`v1.<iv>.<cifra+tag>`, em base64url: IV de 12 bytes, AES-256-GCM com tag de 16 bytes, AAD = id do usuário. O `v1` permite trocar o formato depois sem ambiguidade. O Worker trata o valor como opaco e só confere o formato.

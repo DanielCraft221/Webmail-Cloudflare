@@ -66,7 +66,13 @@ export const totpSecretEnc = z
   .string()
   .max(512)
   .regex(/^v1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
-export const displayName = z.string().trim().min(1).max(100);
+/** No control or format characters: these strings end up printed in the admin's terminal (CLI). */
+const plainText = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .regex(/^[^\p{Cc}\p{Cf}]*$/u, "Control characters are not allowed");
+export const displayName = plainText(100).trim().min(1);
 export const ip = z.union([z.ipv4(), z.ipv6()]);
 
 export const authLookupBody = z.strictObject({ username });
@@ -97,7 +103,7 @@ export const cliAuditAction = z.enum([
 const auditDetail = z
   .record(
     z.string().max(32),
-    z.union([z.string().max(100), z.number(), z.boolean(), z.null()]),
+    z.union([plainText(100), z.number(), z.boolean(), z.null()]),
   )
   .refine(
     (d) => Object.keys(d).length <= 10 && JSON.stringify(d).length <= 500,
@@ -105,7 +111,7 @@ const auditDetail = z
       message: "Detail too large",
     },
   );
-const auditTarget = z.string().min(1).max(100);
+const auditTarget = plainText(100).min(1);
 
 export const webmailAuditBody = z.strictObject({
   action: webmailAuditAction,

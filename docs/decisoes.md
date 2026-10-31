@@ -268,3 +268,23 @@ Não há opção para excluir esses campos. O `redact_query_string` do `wrangler
 - *Drop suppressed recipients* desligado (padrão). Ligado, um envio para um destinatário suprimido responde `250` sem entregar nada. Desligado, o nLogin recebe o erro.
 - *Email preview* desligado em `mail.survivusmc.com`: ele guardaria por cerca de 7 dias o conteúdo das mensagens, incluindo os códigos de recuperação. Ele só é ligado por pouco tempo, para depurar.
 - Sem assinatura DKIM pelo domínio principal (`d=survivusmc.com`), só para o Gmail mostrar "assinado por: survivusmc.com". O ganho seria só visual, e o DMARC já passa com `mail.survivusmc.com`.
+
+## Autenticação do webmail (Etapa 5)
+
+**Senha e código verificados no webmail, não no Worker.** O argon2id com parâmetros decentes (64 MiB, `docs/webmail-auth.md`) não cabe no limite de CPU de um Worker. O webmail busca o hash em `POST /v1/auth/lookup` e verifica localmente. Os dados continuam no D1, a fonte da verdade.
+
+**Segredo TOTP cifrado, com o id do usuário como dado associado.** AES-256-GCM com a `TOTP_ENCRYPTION_KEY`, que só o webmail conhece. Quem lê o D1 não gera códigos. O id do usuário entra como AAD: colar no D1 o segredo cifrado de outro usuário faz a decifragem falhar. Perder a chave não perde e-mail: obriga a refazer o 2FA de todos pela CLI.
+
+**Token de administração separado (`ADMIN_API_TOKEN`).** Só a CLI tem. O `INTERNAL_API_TOKEN` não abre `/v1/admin/*`, e o `ADMIN_API_TOKEN` não abre as outras rotas. Se o webmail for comprometido, o atacante não cria um usuário para manter acesso nem reseta o 2FA de ninguém.
+- O grupo de cada rota é decidido pelo **padrão da rota casada**, não pelo texto da URL: uma URL codificada ou com barra dupla não muda o token exigido.
+- O `audit_log` tem a coluna `source` (`cli` ou `webmail`), definida pelo token que gravou, nunca pelo corpo. A CLI grava as ações locais (bans, sessões) por `POST /v1/admin/audit`.
+
+**Um formulário só no login** (usuário, senha e código), sempre com a mesma mensagem de erro: o atacante nunca sabe se acertou a senha. Usuário inexistente custa o mesmo tempo (hash falso com os mesmos parâmetros).
+
+**Sem códigos de recuperação nesta etapa.** Perdeu o celular: o administrador reseta pela CLI. Com 4 pessoas é mais simples, e é um segredo a menos. Está no "Depois".
+
+**Riscos aceitos:**
+- **Quem compromete o webmail lê todas as caixas.** A permissão por caixa confia no `X-Webmail-User` que o webmail manda (vale desde a Etapa 3). O token de admin separado só impede criar usuários e resetar o 2FA.
+- **Bloqueio por username permite negar acesso:** um atacante pode manter um username bloqueado. Com 4 usuários e a CLI para liberar, aceito. O ban por IP é a defesa principal.
+- **Rate limit compartilhado das rotas de serviço:** `/v1/auth/*` e `/v1/audit` dividem uma chave (`service`, 100 por minuto). Um ataque distribuído que passe pelos bans do webmail pode atrasar o login de todos. Com 4 usuários, aceito.
+- **Etapa 7:** a CLI precisa do SQLite de dentro do container (sessões e bans). O jeito de rodá-la lá fica para a Etapa 7.

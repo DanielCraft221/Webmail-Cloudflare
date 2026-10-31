@@ -2,11 +2,25 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 4 (concluída, merge feito em 2026-10-31)
+## Etapa atual: 5 (em andamento: PR 1, Worker)
 
 ### Próximo passo
 
-Daniel revisa e faz o merge do PR de docs `etapa-4/docs-finais`. Depois: `git pull --ff-only origin main` e Etapa 5, que começa com o `docs/etapas/etapa-5.md`.
+Daniel revisa e faz o merge do PR 1 (`etapa-5/worker`). Depois: `git pull --ff-only origin main` e PR 2 (`etapa-5/worker-deploy`): segredos, migração `0003` remota e deploy, cada passo com o "ok" de Daniel.
+
+## Etapa 5: em andamento
+
+### Feito (2026-10-31)
+
+- Pesquisa da tarefa 1 em `docs/webmail-auth.md`: SvelteKit 3 / adapter-node 6, argon2id nativo do Node (medido: 64 MiB, t=3 = 166 ms), TOTP, cookie `__Host-` em localhost, Node LTS.
+- Decisões de Daniel: ficar no Node 24 nesta etapa; `node:sqlite` em vez de `better-sqlite3` (o `CLAUDE.md` muda no PR 3); `@playwright/test` como devDependency, testes do navegador também na CI; coluna `source` no `audit_log`.
+- PR 1: migração `0003`, rotas `/v1/auth/*`, `/v1/me`, `/v1/audit` e `/v1/admin/*` (incluindo `POST /v1/admin/audit` para as ações locais da CLI), testes e `docs/api.md`.
+
+### Falta
+
+- PR 2: implantação do Worker (tarefa 7).
+- PR 3: webmail e CLI. Primeiro passo: testar se o SvelteKit e o `svelte-check` funcionam com o TypeScript 7.0.2; se não, TypeScript 6 só no `apps/webmail`.
+- Tarefa 8 (conta real): o usuário do seed é **`danielcraft221`**, não `daniel`. O comando é `pnpm admin user:reset danielcraft221`.
 
 ## Etapa 4: concluída (2026-10-31)
 
@@ -181,6 +195,13 @@ Ideias que ainda não entraram no roteiro.
 - Tail Worker que receba os eventos do `mail-core` e guarde só os campos do nosso `log()`, sem `mailFrom`, `rcptTo` nem URL (os Workers Logs ficam desligados, `docs/decisoes.md`). Precisa de um lugar para guardar (D1 ou R2) e de uma retenção definida.
 - Ferramenta de reprocessamento da DLQ: reenviar para a fila os `.eml` do R2 que não têm linha no D1 (DLQ expirada após 14 dias), usando o `customMetadata` do objeto. Tratar como duplicata, pela `dedupeKey`, a cópia que fica em `raw/` quando a fila falha no handler.
 - Alerta quando chegar mensagem na DLQ `mail-ingest-dlq`.
+- Migrar para o Node 26 (LTS ativa desde 2026-10-28) num PR próprio, antes da Etapa 7: `engines`, servidor e o Dockerfile da Etapa 7 com a mesma versão.
+- Códigos de recuperação do 2FA.
+- Troca de senha pelo próprio usuário (hoje: `user:reset` pela CLI).
+- Verificação de senha vazada (HIBP, por k-anonimato).
+- Aviso de login novo por e-mail.
+- Regra de rate limit da Cloudflare no `/login` (Etapa 7).
+- Retenção do `audit_log` (hoje fica para sempre).
 - Limpeza das duplicatas em `dup/` no R2 (hoje ficam para sempre). O reprocessamento acima deve ignorar `dup/`.
 - `shellcheck` no CI, para os scripts em `scripts/`.
 - Relay interno de envio. Previsto para a Etapa 12, mas sobe antes se o nLogin não tiver cooldown de recuperação (`docs/smtp-servicos.md`):

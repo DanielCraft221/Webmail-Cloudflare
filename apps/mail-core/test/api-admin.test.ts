@@ -407,6 +407,8 @@ describe("POST /v1/audit", () => {
     [{ action: "logout", ip: "not-an-ip" }],
     [{ action: "logout", detail: { nested: { a: 1 } } }],
     [{ action: "logout", detail: { big: "x".repeat(101) } }],
+    [{ action: "logout", target: "\u001b[2Jforjado" }],
+    [{ action: "logout", detail: { ua: "a\u202eb" } }],
     [
       {
         action: "logout",
@@ -585,6 +587,7 @@ describe("admin users", () => {
     [{ role: "root" }],
     [{ active: "no" }],
     [{ username: "t-x" }],
+    [{ displayName: "Ana\u001b[31m" }],
   ])("patch refuses %j", async (body) => {
     const { id } = await createUser("t-patch-ruim");
     const response = await admin(`/v1/admin/users/${id}`, {
