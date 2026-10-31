@@ -41,6 +41,11 @@ Fonte: [modelo de configuração do nLogin](https://docs.nickuc.com/nlogin/confi
 
 **Antes de criar o token `smtp-nlogin`:** confirme que a recuperação de conta por e-mail funciona na versão do nLogin instalada (a premium, que tem essa função). Sem isso confirmado, o token não é criado.
 
+**Cota e limites.** Os 200 envios por dia são da **conta inteira** (nLogin, NodeBB e o webmail dividem). Ao configurar, verifique no nLogin:
+
+- se existe cooldown ou limite de recuperação por jogador ou por IP. **Sem cooldown**, qualquer um esgota a cota pedindo recuperação em loop. Nesse caso, faça o relay interno (`docs/progresso.md`, "Depois") antes de colocar o nLogin no ar;
+- se a opção de SSL aceita um certificado interno (autoassinado ou de uma CA própria). O relay, se for preciso, usa um certificado desses.
+
 Arquivo: `plugins/nLogin/config.yml` no servidor Minecraft, gerenciado pelo Crafty. Ele vai guardar o token.
 
 **Dono do arquivo.** Antes do `chmod 600`, confira com `stat` se o dono do `config.yml` é o mesmo usuário com que o servidor roda dentro do container do Crafty. Senão, depois do `chmod 600`, o nLogin não consegue ler o arquivo. A referência é o `logs/latest.log`, criado pelo próprio servidor: ele tem o dono certo, com ou sem `userns-remap` no Docker.
@@ -102,6 +107,7 @@ No painel admin do NodeBB: **Settings › Email**.
 - Remetente: `forum@mail.survivusmc.com`.
 - Ative o SMTP personalizado, com os parâmetros comuns acima e o token `smtp-nodebb`.
 - O token fica no banco do NodeBB: nada de dump do banco compartilhado.
+- Confira que o *Email preview* de `mail.survivusmc.com` continua desligado (`docs/cloudflare-envio.md`). Ligado, a Cloudflare guarda por cerca de 7 dias o conteúdo dos e-mails do fórum.
 - Teste com o botão de e-mail de teste do painel e repita o teste de entrega do nLogin (Outlook e Gmail, contas novas).
 
 ## Testar o SMTP sem o serviço
@@ -120,7 +126,7 @@ scripts/smtp-test.sh ~/.config/cloudflare/smtp-teste.env nao-responda@mail.survi
 
 Respostas:
 
-- `250`: aceito. Confira a entrega no Activity log (**Compute › Email Service › Activity log**).
+- `250`: aceito. Confira a entrega no Activity log (**Compute › Email Service › Activity log**). Confira SPF, DKIM e DMARC nos cabeçalhos da **mensagem recebida** (no Gmail: "Mostrar original"), não na prévia do painel: o *Email preview* fica desligado.
 - `535`: token errado, expirado ou revogado.
 - `550`: o domínio do remetente não está ativado no Email Sending.
 

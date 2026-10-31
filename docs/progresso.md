@@ -2,11 +2,11 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 4 (concluída, aguardando validação de Daniel)
+## Etapa atual: 4 (concluída, merge feito em 2026-10-31)
 
 ### Próximo passo
 
-Daniel valida os critérios de pronto da Etapa 4 (lista no PR `etapa-4/envio`) e faz o merge. Depois: `git pull --ff-only origin main` e Etapa 5, que começa com o `docs/etapas/etapa-5.md`.
+Daniel revisa e faz o merge do PR de docs `etapa-4/docs-finais`. Depois: `git pull --ff-only origin main` e Etapa 5, que começa com o `docs/etapas/etapa-5.md`.
 
 ## Etapa 4: concluída (2026-10-31)
 
@@ -35,7 +35,7 @@ Daniel valida os critérios de pronto da Etapa 4 (lista no PR `etapa-4/envio`) e
 ### Riscos
 
 - Outlook põe a mensagem no lixo. Medir com a recuperação real do nLogin.
-- Cota diária do Email Sending não documentada.
+- Cota de 200 envios por dia para a conta inteira. Sem cooldown de recuperação no nLogin, o relay interno vem antes do nLogin entrar no ar.
 - Ativar o domínio principal `survivusmc.com` no Email Sending (Etapa 11) deixa os tokens do nLogin e do NodeBB enviarem como `contato@survivusmc.com`. Reavaliar antes, como na Etapa 12.
 
 ## Etapa 3: concluída (2026-10-29)
@@ -182,3 +182,11 @@ Ideias que ainda não entraram no roteiro.
 - Ferramenta de reprocessamento da DLQ: reenviar para a fila os `.eml` do R2 que não têm linha no D1 (DLQ expirada após 14 dias), usando o `customMetadata` do objeto. Tratar como duplicata, pela `dedupeKey`, a cópia que fica em `raw/` quando a fila falha no handler.
 - Alerta quando chegar mensagem na DLQ `mail-ingest-dlq`.
 - Limpeza das duplicatas em `dup/` no R2 (hoje ficam para sempre). O reprocessamento acima deve ignorar `dup/`.
+- `shellcheck` no CI, para os scripts em `scripts/`.
+- Relay interno de envio. Prevista para a Etapa 12, mas sobe antes se o nLogin não tiver cooldown de recuperação (`docs/smtp-servicos.md`):
+  - container próprio `mail-relay`, separado do webmail, sem portas publicadas;
+  - redes: a do Minecraft, depois a do NodeBB, e uma de saída própria. Nunca a rede do webmail;
+  - uma credencial do relay por serviço, com remetente fixo;
+  - só o relay guarda o token da Cloudflare;
+  - limites por destinatário (ex.: 3 por hora) e por serviço por dia (ex.: nLogin 100, NodeBB 50), deixando sobra da cota de 200 para o webmail;
+  - log sem conteúdo: serviço, hash do destinatário e status.
