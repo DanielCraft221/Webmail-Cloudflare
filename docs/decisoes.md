@@ -252,3 +252,18 @@ Não há opção para excluir esses campos. O `redact_query_string` do `wrangler
 **Consequência na API:** a busca passou de `GET /v1/search?q=` para `POST /v1/search`, com o termo no corpo JSON. O termo nunca vai numa URL, que plataformas e proxies costumam registrar.
 
 **Depois:** um Tail Worker que receba os eventos do `mail-core` e guarde só os campos do nosso `log()` (`docs/progresso.md`, seção "Depois").
+
+## Envio só por `mail.survivusmc.com`
+
+**Decisão:** na Etapa 4, só o subdomínio `mail.survivusmc.com` fica ativado no Email Sending. O `survivus.com.br`, ativado numa tentativa antiga, foi removido em 2026-10-30. O Email Routing dele continua funcionando.
+
+**Motivo:** um token SMTP envia por **qualquer** domínio ativado na conta. Com só o subdomínio ativado, um token vazado do nLogin ou do NodeBB não envia como `contato@survivus.com.br`.
+
+**Medido:**
+- `contato@survivus.com.br` e `contato@survivusmc.com` (domínios não ativados) foram recusados com `550`, mesmo para um destino verificado do Email Routing.
+- O `550` do domínio principal `survivusmc.com` **só vale enquanto ele não estiver ativado** no Email Sending. Ativar o domínio principal (Etapa 11) exige reavaliar os tokens do nLogin e do NodeBB, como na Etapa 12. A partir daí, um token desses enviaria como `contato@survivusmc.com`.
+
+**Também decidido:**
+- DMARC de `mail.survivusmc.com`: fica o `p=reject` criado pelo onboarding, com o `rua` do DMARC Management (o mesmo do domínio principal). A etapa sugeria começar com `p=none`. Como o subdomínio só envia pela Cloudflare e o teste mostrou DMARC `pass` alinhado, não há motivo para afrouxar.
+- *Drop suppressed recipients* desligado (padrão). Ligado, um envio para um destinatário suprimido responde `250` sem entregar nada. Desligado, o nLogin recebe o erro.
+- Sem assinatura DKIM pelo domínio principal (`d=survivusmc.com`), só para o Gmail mostrar "assinado por: survivusmc.com". O ganho seria só visual, e o DMARC já passa com `mail.survivusmc.com`.

@@ -25,6 +25,16 @@ Atualize a cada segredo criado ou rotacionado. **Sem valores.**
 | Service Token `webmail` do Access (Client ID e Client Secret) | `~/.config/webmail/api.env` no servidor (`chmod 600`). O Client ID também como `wrangler secret` `ACCESS_CLIENT_ID` | Webmail → Cloudflare Access na frente de `mail-api.survivus.com.br` | Passa só pela política "Service Auth" dessa aplicação | Criado no PR 2 da Etapa 3 (fim de outubro de 2026), duração de 1 ano: expira no fim de outubro de 2027. Data exata em Zero Trust › Service Tokens. Renovar antes, senão o webmail perde o acesso à API |
 | `ACCESS_AUD` (AUD tag da aplicação `mail-api` do Access) | `wrangler secret` do `mail-core` e `~/.config/webmail/api.env` | Worker, para conferir o `aud` do JWT do Access | Nenhuma: não é segredo de verdade (o Access o devolve no cabeçalho `cf-access-aud`). É secret só para ficar fora do repositório sem exceção no gitleaks | Criado no PR 2 da Etapa 3. Muda só se a aplicação for recriada |
 
+Tokens temporários já revogados (histórico, para conferir com a lista de tokens no painel):
+
+| Nome | Uso | Permissões | Criado | Revogado |
+| ---- | --- | ---------- | ------ | -------- |
+| `logs-check` | Consultar os Workers Logs guardados (tarefa 8 da Etapa 3) | Workers Observability Read | 2026-10-29 | 2026-10-30. Arquivo `~/.config/cloudflare/logs-check.env` apagado |
+| `smtp-teste` | Testes de envio da Etapa 4 | Email Sending: Edit | 2026-10-30 (validade até 2026-11-07, deveria ser 1 dia) | 2026-10-31. SMTP `535` e API `Invalid API Token` conferidos |
+| `smtp-teste-2` | Teste do domínio principal e dos cabeçalhos (Etapa 4) | Email Sending: Edit | 2026-10-31 | 2026-10-31. SMTP `535` e API `Invalid API Token` conferidos. Arquivo `~/.config/cloudflare/smtp-teste.env` apagado |
+
+Hoje não existe nenhum token com *Email Sending: Edit*. Os tokens `smtp-nlogin` e `smtp-nodebb` só são criados na hora de configurar cada serviço (`docs/smtp-servicos.md`).
+
 Tokens SMTP: rotação a cada 6 meses, ou na hora em caso de suspeita.
 
 ## Gerar um segredo forte

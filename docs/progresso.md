@@ -2,16 +2,41 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 4 (não iniciada)
+## Etapa atual: 4 (concluída, aguardando validação de Daniel)
 
 ### Próximo passo
 
-Etapa 4 (envio para serviços: Email Sending em `mail.survivusmc.com`). O `docs/etapas/etapa-4.md` ainda não existe: Daniel escreve e coloca na pasta. Na próxima sessão: commitar o arquivo num branch, ler e apresentar o plano.
+Daniel valida os critérios de pronto da Etapa 4 (lista no PR `etapa-4/envio`) e faz o merge. Depois: `git pull --ff-only origin main` e Etapa 5, que começa com o `docs/etapas/etapa-5.md`.
 
-### Antes de começar
+## Etapa 4: concluída (2026-10-31)
 
-- Revogar o token `logs-check` no painel (expira em 2026-11-01) e apagar `~/.config/cloudflare/logs-check.env`.
-- Opcional: `printf 'SMOKE_USER_ID=%s\n' b2a98933-aa45-4af9-b0f3-dd58c4283e7b >> ~/.config/webmail/api.env`, para o `smoke-api.sh` rodar sem variável na linha de comando.
+### Feito (2026-10-30 e 2026-10-31)
+
+- `git pull --ff-only` com "Cannot fast-forward to multiple branches": a configuração do git estava limpa e o erro não se repetiu. Sem mudança no config. Usar sempre `git pull --ff-only origin main`.
+- Pesquisa em `docs/cloudflare-envio.md`.
+- Email Sending: encontrado o `survivus.com.br` ativado (tentativa antiga). Daniel removeu pelo painel. Hoje só `mail.survivusmc.com` está ativado. O recebimento de `survivus.com.br` continuou funcionando (e-mail de teste com `spf`, `dkim` e `dmarc` = `pass`).
+- DMARC de `mail.survivusmc.com`: mantido o `p=reject`, com o `rua` do DMARC Management.
+- `scripts/smtp-test.sh`: token lido de arquivo `chmod 600` e passado ao `curl` por descritor (`-K`), nunca em argumento nem na saída. Confere o formato dos endereços.
+- Testes com os tokens temporários `smtp-teste` e `smtp-teste-2`, já revogados (resultados em `docs/cloudflare-envio.md`):
+  - Gmail: entregue na caixa de entrada. Outlook: entregue no **lixo eletrônico**, com tudo `pass`;
+  - SPF, DKIM (`d=mail.survivusmc.com`) e DMARC `pass`, alinhados;
+  - `contato@survivus.com.br` e `contato@survivusmc.com`: `550`;
+  - token errado ou revogado: `535`.
+- A Cloudflare substitui o `Message-ID` da mensagem. O script não gera mais um.
+- `docs/smtp-servicos.md`: parâmetros, criação de token, nLogin (Crafty, dono do arquivo, backups, teste de entrega no Outlook), NodeBB e rotação.
+- Decisão em `docs/decisoes.md`, inventário em `docs/segredos.md`, comando no `CLAUDE.md`.
+- `.eml` de teste apagados do servidor.
+
+### Falta
+
+- **Tarefa 6 (nLogin): adiada.** O Crafty ainda não tem servidor. Nenhum token `smtp-nlogin` foi criado. Quando o servidor existir, seguir `docs/smtp-servicos.md`.
+- NodeBB: não instalado.
+
+### Riscos
+
+- Outlook põe a mensagem no lixo. Medir com a recuperação real do nLogin.
+- Cota diária do Email Sending não documentada.
+- Ativar o domínio principal `survivusmc.com` no Email Sending (Etapa 11) deixa os tokens do nLogin e do NodeBB enviarem como `contato@survivusmc.com`. Reavaliar antes, como na Etapa 12.
 
 ## Etapa 3: concluída (2026-10-29)
 
