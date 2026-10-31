@@ -189,4 +189,4 @@ Ideias que ainda não entraram no roteiro.
   - uma credencial do relay por serviço, com remetente fixo;
   - só o relay guarda o token da Cloudflare;
   - limites por destinatário (ex.: 3 por hora) e por serviço por dia (ex.: nLogin 100, NodeBB 50), deixando sobra da cota de 200 para o webmail;
-  - log sem conteúdo: serviço, hash do destinatário e status.
+  - log sem conteúdo: serviço, HMAC-SHA-256 do destinatário com chave guardada só no relay e status.

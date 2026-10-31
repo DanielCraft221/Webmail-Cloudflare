@@ -25,7 +25,7 @@ Fonte: [Configure subdomains](https://developers.cloudflare.com/email-service/co
 
 Fontes: [Limits](https://developers.cloudflare.com/email-service/platform/limits/) e [Pricing](https://developers.cloudflare.com/email-service/platform/pricing/).
 
-- **Cota diária:** uma conta nova começa com uma cota diária "conservadora", que cresce com a reputação. A documentação não diz o número. **Nesta conta: 200 por dia** (conferido em 2026-10-31). A cota vale para a **conta inteira**: nLogin, NodeBB e, a partir da Etapa 8, o webmail dividem os mesmos 200. Para pedir aumento, há o formulário da página de limites.
+- **Cota diária:** uma conta nova começa com uma cota diária "conservadora", que cresce com a reputação. A documentação não diz o número. **Nesta conta: 200 por dia** (painel, **Compute › Email Service › Email Sending**, conferido em 2026-10-31). A cota vale para a **conta inteira**: nLogin, NodeBB e, a partir da Etapa 8, o webmail dividem os mesmos 200. Para pedir aumento, há o formulário da página de limites.
 - **Cota mensal:** o plano Workers Paid inclui 3.000 envios por mês. Depois disso, US$ 0,35 a cada 1.000.
 - Até 50 destinatários por mensagem.
 - **Endereços de destino verificados** (os do Email Routing): enviar para eles é grátis e não conta na cota. A página de limites diz que, nesse caso, só se envia "*from your routing domains*". **Testado em 2026-10-30:** `contato@survivus.com.br` (só Email Routing, sem Email Sending) para o Gmail, destino verificado, foi recusado com `550`. Ter Email Routing não basta para enviar.
@@ -108,7 +108,7 @@ Um único SPF por nome em todos.
 Configurações de `mail.survivusmc.com`:
 
 - **Drop suppressed recipients: desligado.** Ligado, uma mensagem com um único destinatário suprimido pode receber `250` sem ser entregue: uma falha silenciosa.
-- **Email preview: desligado.** Ligado, ele guarda o conteúdo completo dos e-mails por cerca de 7 dias. Para depurar, ligue por pouco tempo e desligue depois. O Activity log continua mostrando o status.
+- **Email preview: desligado** (conferido no painel em 2026-10-31). Ligado, ele guarda o conteúdo completo dos e-mails por cerca de 7 dias. Para depurar, ligue por pouco tempo e desligue depois. O Activity log continua mostrando o status.
 
 ## Resultado dos testes (2026-10-30 e 2026-10-31)
 
