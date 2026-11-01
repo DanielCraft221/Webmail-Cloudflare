@@ -181,10 +181,7 @@ Casos obrigatórios, além dos que você achar necessários:
 ### 7. Implantação do Worker (PR 2; cada passo na Cloudflare: mostre e espere meu "ok")
 
 1. **Segredos gerados por mim**, nunca por você nem no chat:
-   ```bash
-   install -m 600 /dev/null ~/.config/webmail/admin.env
-   install -m 600 /dev/null ~/.config/webmail/webmail.env
-   ```
+   Comando com proteção contra rodar duas vezes em `docs/cloudflare.md`, seção 9.1. **Nunca use `install -m 600 /dev/null` solto sobre arquivos que já existem:** ele os zera e gera uma `TOTP_ENCRYPTION_KEY` nova.
    - `admin.env`: `ADMIN_API_TOKEN` (`openssl rand -base64 48`), mais o Client ID e o Client Secret do Service Token (copiados do `api.env`).
    - `webmail.env`: o que o webmail precisa (`INTERNAL_API_TOKEN`, o Service Token e a `TOTP_ENCRYPTION_KEY`, com `openssl rand -base64 32`). **Sem o `ADMIN_API_TOKEN`.**
    - Me passe comandos que gravem o valor no arquivo **sem mostrar na tela**, e o `wrangler secret put ADMIN_API_TOKEN` lendo da entrada padrão.

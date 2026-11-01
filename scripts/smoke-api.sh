@@ -6,6 +6,8 @@
 #   to curl through a file descriptor, never through the command line.
 # - Finds mailbox, message and attachment ids through the API itself.
 # - Leaves the data as it found it: the read flag it flips is restored.
+# - Optional: with ~/.config/webmail/admin.env (or $ADMIN_API_ENV), also checks that the admin and
+#   internal tokens only open their own routes. Only ADMIN_API_TOKEN is read from that file.
 # - Optional: with CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID loaded, also checks that
 #   workers.dev stays off.
 set -uo pipefail
@@ -28,11 +30,16 @@ pass() { echo "PASS $1"; }
 fail() { echo "FAIL $1"; fails=$((fails + 1)); }
 skip() { echo "SKIP $1"; }
 
-# headers <none|access|nouser|user> [uuid]: the request headers for each level of credentials.
+# headers <none|access|nouser|user|admin|adminuser> [uuid]: the request headers for each level of credentials.
 headers() {
   case $1 in
     none) ;;
     access) printf 'CF-Access-Client-Id: %s\nCF-Access-Client-Secret: %s\n' "$CF_ACCESS_CLIENT_ID" "$CF_ACCESS_CLIENT_SECRET" ;;
+    admin | adminuser)
+      printf 'CF-Access-Client-Id: %s\nCF-Access-Client-Secret: %s\nAuthorization: Bearer %s\n' \
+        "$CF_ACCESS_CLIENT_ID" "$CF_ACCESS_CLIENT_SECRET" "$ADMIN_API_TOKEN"
+      [ "$1" = admin ] || printf 'X-Webmail-User: %s\n' "$2"
+      ;;
     *)
       printf 'CF-Access-Client-Id: %s\nCF-Access-Client-Secret: %s\nAuthorization: Bearer %s\n' \
         "$CF_ACCESS_CLIENT_ID" "$CF_ACCESS_CLIENT_SECRET" "$INTERNAL_API_TOKEN"
@@ -153,7 +160,39 @@ else
   else fail "GET /v1/search: expected 404, got $s"; fi
 fi
 
-# 7. workers.dev stays off (needs the Wrangler token loaded, docs/cloudflare.md section 1).
+# 7. Token groups (docs/api.md): the admin token opens only /v1/admin/*, the internal one never does.
+s=$(req user "$user" GET /v1/me)
+if [ "$s" = 200 ] && [ "$(json 'd["id"]')" = "$user" ]; then pass "GET /v1/me: the user's own profile"
+else fail "GET /v1/me: expected 200 with the user's id, got $s"; fi
+
+admin_env=${ADMIN_API_ENV:-$HOME/.config/webmail/admin.env}
+# Only ADMIN_API_TOKEN is taken from the file, into a variable, never printed.
+# shellcheck disable=SC1090
+[ -r "$admin_env" ] && ADMIN_API_TOKEN=$(. "$admin_env" && printf '%s' "${ADMIN_API_TOKEN:-}")
+if [ -z "${ADMIN_API_TOKEN:-}" ]; then
+  skip "token groups: no ADMIN_API_TOKEN in $admin_env"
+else
+  for mode in nouser user; do
+    s=$(req "$mode" "$user" GET /v1/admin/users)
+    if worker_401 "$s"; then pass "internal token ($mode) on /v1/admin/users: 401"
+    else fail "internal token ($mode) on /v1/admin/users: expected 401, got $s"; fi
+  done
+  s=$(req admin - GET /v1/admin/users)
+  if [ "$s" = 200 ] && [ "$(json 'len(d["users"]) > 0')" = True ] \
+    && ! grep -qiE 'password_?hash|totp_?secret|setup_?token|argon2' "$tmp/body"; then
+    pass "admin token on /v1/admin/users: $(json 'len(d["users"])') user(s), no secrets"
+  else fail "admin token on /v1/admin/users: expected 200 without secrets, got $s"; fi
+  s=$(req admin - GET "/v1/admin/audit?limit=1")
+  if [ "$s" = 200 ] && [ "$(json '"events" in d')" = True ]; then pass "admin token on /v1/admin/audit: 200"
+  else fail "admin token on /v1/admin/audit: expected 200, got $s"; fi
+  for mode in admin adminuser; do
+    s=$(req "$mode" "$user" GET /v1/mailboxes)
+    if worker_401 "$s"; then pass "admin token ($mode) on /v1/mailboxes: 401"
+    else fail "admin token ($mode) on /v1/mailboxes: expected 401, got $s"; fi
+  done
+fi
+
+# 8. workers.dev stays off (needs the Wrangler token loaded, docs/cloudflare.md section 1).
 if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
   sub=$(curl -sS --max-time 30 --header @<(printf 'Authorization: Bearer %s\n' "$CLOUDFLARE_API_TOKEN") \
     "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" |

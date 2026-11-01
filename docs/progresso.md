@@ -2,18 +2,18 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 5 (em andamento: PR 1 em revisão)
+## Etapa atual: 5 (em andamento: PR 2 em revisão)
 
 ### Próximo passo
 
-1. Daniel termina a revisão do PR 1 (`etapa-5/worker`) e faz o merge no GitHub.
-2. Na próxima sessão (2026-11-01, manhã): `git checkout main && git pull --ff-only origin main`, depois `git checkout -b etapa-5/worker-deploy`.
-3. PR 2, tarefa 7 de `docs/etapas/etapa-5.md`, nesta ordem, cada passo na Cloudflare com o comando mostrado e o "ok" de Daniel:
-   - Daniel cria `~/.config/webmail/admin.env` e `~/.config/webmail/webmail.env` (`install -m 600 /dev/null ...`) e grava os valores com comandos que não mostram nada na tela. `webmail.env` **sem** o `ADMIN_API_TOKEN`.
-   - `wrangler secret put ADMIN_API_TOKEN`, lendo da entrada padrão.
-   - Migração `0003` no D1 remoto.
-   - Deploy a partir da `main` limpa.
-   - Daniel roda os testes com `curl`: token interno em `/v1/admin/users` dá 401; token de admin lista sem segredos; token de admin em `/v1/mailboxes` dá 401. Depois, `scripts/smoke-api.sh`.
+PR 2 (`etapa-5/worker-deploy`), `docs/cloudflare.md` seção 9, cada passo na Cloudflare com o "ok" de Daniel:
+- Feito: `admin.env` e `webmail.env` criados (9.1); `ADMIN_API_TOKEN` gravado no Worker (9.2).
+- Feito: migração `0003` no D1 remoto (2026-11-01). Conferido: nenhuma pendente, colunas e índices novos existem, contagens iguais antes e depois (1 usuário, 7 mensagens, 3 caixas; `audit_log` vazio).
+- **Ponto de restauração** (Time Travel, lido às 2026-11-01T12:41:14Z, logo antes da migração, válido até 2026-12-01): `00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. Comando: `wrangler d1 time-travel restore webmail-db --bookmark=00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. **Restaurar volta o D1 inteiro**: e-mails recebidos depois do marcador perdem a linha no D1 (o `.eml` fica no R2). Usar só logo depois de uma migração com problema; mais tarde, só com um plano de reprocessamento (`docs/cloudflare.md`, seção 9.3).
+- Feito: deploy da `main` (`37d76bf`) em 2026-11-01. Versão anterior (código da Etapa 4 + secret novo): `2f832b04-2e59-440f-8f27-21fb6481d567`. Versão nova: `4ff110af-0455-4efa-b587-389197cb89ae`. Rollback: `pnpm exec wrangler rollback 2f832b04-2e59-440f-8f27-21fb6481d567`.
+- `scripts/smoke-api.sh` ganhou os testes de `GET /v1/me` e da separação dos tokens (lê só o `ADMIN_API_TOKEN` do `admin.env`).
+- `scripts/smoke-api.sh` rodado por Daniel depois do deploy: 20 PASS.
+- Falta: Daniel revisa e faz o merge do PR 2. Depois: `git pull --ff-only origin main` e PR 3 (`etapa-5/webmail`), começando pelo teste do SvelteKit e do `svelte-check` com o TypeScript 7.0.2.
 
 ## Etapa 5: em andamento
 
@@ -22,11 +22,12 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 - Pesquisa da tarefa 1 em `docs/webmail-auth.md`: SvelteKit 3 / adapter-node 6, argon2id nativo do Node (medido: 64 MiB, t=3 = 166 ms), TOTP, cookie `__Host-` em localhost, Node LTS.
 - Decisões de Daniel: ficar no Node 24 nesta etapa; `node:sqlite` em vez de `better-sqlite3` (o `CLAUDE.md` muda no PR 3); `@playwright/test` como devDependency, testes do navegador também na CI; coluna `source` no `audit_log`.
 - PR 1: migração `0003`, rotas `/v1/auth/*`, `/v1/me`, `/v1/audit` e `/v1/admin/*` (incluindo `POST /v1/admin/audit` para as ações locais da CLI), testes e `docs/api.md`.
+- PR 1 aprovado e no `main` (2026-11-01).
 - PR 1 com push no `etapa-5/worker`. Lint, typecheck e testes (15 + 187) passam; gitleaks limpo. security-audit: um achado baixo corrigido (caracteres de controle no audit e no `displayName`). Nada mudou na Cloudflare.
 
 ### Falta
 
-- PR 2: implantação do Worker (tarefa 7).
+- PR 2: implantação do Worker (tarefa 7), em andamento.
 - PR 3: webmail e CLI. Primeiro passo: testar se o SvelteKit e o `svelte-check` funcionam com o TypeScript 7.0.2; se não, TypeScript 6 só no `apps/webmail`.
 - Tarefa 8 (conta real): o usuário do seed é **`danielcraft221`**, não `daniel`. O comando é `pnpm admin user:reset danielcraft221`.
 
