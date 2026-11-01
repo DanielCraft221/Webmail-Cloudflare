@@ -255,3 +255,78 @@ Rode da raiz do repositório. Com o token do Wrangler carregado, ele também con
   scripts/smoke-api.sh
 )
 ```
+
+## 9. Administração e webmail (Etapa 5, PR 2)
+
+### 9.1 Segredos, gerados por você (uma única vez)
+
+`admin.env` (CLI de administração) e `webmail.env` (webmail), em `~/.config/webmail/`, `chmod 600`. O Client ID, o Client Secret e o `INTERNAL_API_TOKEN` são copiados do `api.env` com `grep`. Os valores novos vão direto para o arquivo, sem aparecer na tela.
+
+**Nunca rode de novo.** O `install -m 600 /dev/null` zera um arquivo que já exista, e uma `TOTP_ENCRYPTION_KEY` nova deixa todos os segredos TOTP do D1 ilegíveis (todos refazem o 2FA). Por isso o comando só cria os arquivos se nenhum dos dois existir; senão, não altera nada:
+
+```bash
+(
+  cd ~/.config/webmail || exit 1
+  if [ -e admin.env ] || [ -e webmail.env ]; then
+    echo "admin.env ou webmail.env já existe: nada foi alterado." >&2
+  else
+    install -m 600 /dev/null admin.env
+    install -m 600 /dev/null webmail.env
+    { printf 'ADMIN_API_TOKEN=%s\n' "$(openssl rand -base64 48)"
+      grep -E '^CF_ACCESS_CLIENT_(ID|SECRET)=' api.env; } > admin.env
+    { grep -E '^(INTERNAL_API_TOKEN|CF_ACCESS_CLIENT_ID|CF_ACCESS_CLIENT_SECRET)=' api.env
+      printf 'TOTP_ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)"; } > webmail.env
+  fi
+)
+```
+
+Conferência, só contagens (esperado: `1 2 3 1 0`, e `600` nos dois):
+
+```bash
+(
+  cd ~/.config/webmail || exit 1
+  echo $(grep -c '^ADMIN_API_TOKEN=.\{64\}$' admin.env) $(grep -c '^CF_ACCESS_CLIENT_' admin.env) \
+    $(grep -cE '^(INTERNAL_API_TOKEN|CF_ACCESS_CLIENT_ID|CF_ACCESS_CLIENT_SECRET)=' webmail.env) \
+    $(grep -c '^TOTP_ENCRYPTION_KEY=.\{44\}$' webmail.env) $(grep -c ADMIN webmail.env)
+  stat -c '%a %n' admin.env webmail.env
+)
+```
+
+Criados em 2026-11-01. Rotação do `ADMIN_API_TOKEN`: troque só a linha dele no `admin.env` (nunca recrie o `webmail.env`) e repita o 9.2.
+
+### 9.2 `ADMIN_API_TOKEN` no Worker
+
+```bash
+cd apps/mail-core
+(
+  set -a; . ~/.config/cloudflare/wrangler.env; set +a
+  . ~/.config/webmail/admin.env
+  printf '%s' "$ADMIN_API_TOKEN" | WRANGLER_SEND_METRICS=false pnpm exec wrangler secret put ADMIN_API_TOKEN
+)
+```
+
+Conferir só os nomes: `pnpm exec wrangler secret list`. Gravado em 2026-11-01.
+
+### 9.3 Ponto de restauração antes de migrar (Time Travel do D1)
+
+Antes de toda migração remota, anote o marcador atual ([documentação](https://developers.cloudflare.com/d1/reference/time-travel/)). Só leitura, não altera o banco:
+
+```bash
+pnpm exec wrangler d1 time-travel info webmail-db
+```
+
+A saída traz o marcador e o comando de restauração (`wrangler d1 time-travel restore webmail-db --bookmark=<marcador>`). No plano pago, o marcador vale por 30 dias.
+
+**Restaurar é destrutivo:**
+- Volta o D1 **inteiro** ao marcador, não só a migração. Consultas em andamento são canceladas.
+- E-mails recebidos depois do marcador **perdem a linha no D1**. O `.eml` continua no R2, mas some do webmail.
+- Use **só logo depois de uma migração com problema**. Mais tarde, só com um plano de reprocessamento dos `.eml` recebidos depois do marcador.
+- A restauração devolve um marcador novo, que serve para desfazê-la.
+
+### 9.4 Migração `0003` e deploy
+
+```bash
+pnpm exec wrangler d1 migrations apply webmail-db --remote
+pnpm exec wrangler deployments status   # anote o id da versão no ar, para o rollback
+pnpm exec wrangler deploy               # da main atualizada e limpa
+```
