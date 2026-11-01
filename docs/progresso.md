@@ -18,16 +18,14 @@ Produção do webmail numa VPS própria (`survivus-vps01`, OVHcloud BHS); o serv
 
 ### Próximo passo
 
-**PR 3 aguardando o `@sveltejs/kit` 3.1.1 (liberado em 2026-11-05) e o `@sveltejs/adapter-node` 6.0.1 (liberado em 2026-11-06).** Não começar a Etapa 6 antes do merge.
+**PR 3 (#24, rascunho) pronto, aguardando só o `@sveltejs/kit` 3.1.1 e o `@sveltejs/adapter-node` 6.0.1.** CI verde nos três jobs (`secrets`, `quality`, `browser`) no `63afd2a`. Não começar a Etapa 6 antes do merge.
 
-1. Daniel revisa o PR 3 (`etapa-5/webmail`). **Condição dura para o merge: atualizar antes para `@sveltejs/kit` 3.1.1 e `@sveltejs/adapter-node` 6.0.1** (seis avisos de segurança corrigidos; `docs/webmail-auth.md`). A regra de 7 dias do pnpm libera o kit em 2026-11-05 e o adapter em 2026-11-06 (o `svelte` 5.57.3 em 2026-11-02). Se o PR estiver pronto antes, ele espera.
-2. Revisão independente (sessão só leitura, 2026-11-01): 5 achados, os 5 corrigidos no branch (commits `9de60e3`..`41351c4`, com teste e mutação; `docs/decisoes.md`). Claude Security ainda não rodou (falta o Workflow).
-3. O job `browser` da CI ainda não rodou: o `ci.yml` só dispara em `pull_request` e em push na `main`. Daniel abre o PR: https://github.com/DanielCraft221/Webmail-Cloudflare/compare/main...etapa-5/webmail
-4. Para atualizar: trocar as três versões em `apps/webmail/package.json`, `pnpm install`, `pnpm lint && pnpm typecheck && pnpm test`, commit no próprio branch e conferir o job `browser` da CI.
-5. Depois do merge, **nesta ordem** (o PR 3 agora muda o Worker: 401 para usuário sem senha ou 2FA e `updatedAt` no `GET /v1/me`; sem migração):
+1. **Em 2026-11-06** (a regra de 7 dias do pnpm libera o kit em 2026-11-05 e o adapter em 2026-11-06): no branch `etapa-5/webmail`, trocar para `@sveltejs/kit` 3.1.1 e `@sveltejs/adapter-node` 6.0.1 (e o `svelte` 5.57.3) em `apps/webmail/package.json`, `pnpm install`, `pnpm lint && pnpm typecheck && pnpm test`, commit, push, conferir os três jobs da CI pela API e reler o `docs/webmail-auth.md` (avisos de segurança e lista de padrões proibidos).
+2. Daniel lê linha por linha os arquivos sensíveis (`.github/workflows/ci.yml`, `.gitignore`, `CLAUDE.md`), atualiza a descrição do PR e faz o merge.
+3. Depois do merge, **nesta ordem** (o PR 3 muda o Worker: 401 para usuário sem senha ou 2FA e `updatedAt` no `GET /v1/me`; sem migração):
    1. Deploy do Worker da `main` limpa (mostrar o comando e esperar o "ok"; anotar a versão anterior para o rollback). Tem de vir antes da tarefa 8: o webmail novo exige o `updatedAt` no `/v1/me`.
    2. `scripts/smoke-api.sh` logo depois: **as checagens com o `SMOKE_USER_ID` (grupo usuário) vão dar 401**, porque o `danielcraft221` ainda não tem senha. Esperado. Access, tokens e rotas de serviço têm de passar; qualquer outra falha → rollback.
-   3. Tarefa 8 (conta real), com o "ok" de Daniel antes do `user:reset` (mexe no D1 de produção).
+   3. Tarefa 8 (conta real), com o "ok" de Daniel antes do `user:reset danielcraft221` (mexe no D1 de produção).
    4. `scripts/smoke-api.sh` de novo: tudo PASS.
 
 ## Etapa 5: em andamento
@@ -45,12 +43,22 @@ Produção do webmail numa VPS própria (`survivus-vps01`, OVHcloud BHS); o serv
   - **Ponto de restauração** (Time Travel, lido às 2026-11-01T12:41:14Z, logo antes da migração, válido até 2026-12-01): `00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. Comando: `wrangler d1 time-travel restore webmail-db --bookmark=00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. **Restaurar volta o D1 inteiro**: e-mails recebidos depois do marcador perdem a linha no D1 (o `.eml` fica no R2). Usar só logo depois de uma migração com problema; mais tarde, só com um plano de reprocessamento (`docs/cloudflare.md`, seção 9.3).
   - Deploy da `main` (`37d76bf`). Versão anterior (código da Etapa 4 + secret novo): `2f832b04-2e59-440f-8f27-21fb6481d567`. Versão nova: `4ff110af-0455-4efa-b587-389197cb89ae`. Rollback: `pnpm exec wrangler rollback 2f832b04-2e59-440f-8f27-21fb6481d567`.
   - `scripts/smoke-api.sh` com os testes de `GET /v1/me` e da separação dos tokens: 20 PASS.
+- **PR 3 (#24), sessão de 2026-11-01 (tarde):**
+  - **Revisão independente por sessão nova** (só leitura): 5 achados, todos corrigidos com teste e mutação. Ela **substitui o scan do Claude Security**, que não roda aqui (exige o modo auto, que Daniel não vai ligar, e um Workflow que não existe).
+    1. Bloqueio por username: por username + origem (IPv4, ou `/48` do IPv6, porque a Hurricane Electric dá um `/48` de graça), mais um limite global de 50 em 15 minutos; tentativas durante o bloqueio não renovam. O ban por IP continua por `/64`.
+    2. Sessões após reset: o Worker responde 401 no grupo usuário sem `password_hash` ou `totp_secret_enc`; o `GET /v1/me` devolve `updatedAt`; o webmail apaga as sessões criadas antes dele. A configuração recomeça o histórico de passos TOTP (bug achado pelo e2e).
+    3. `TOTP_ENCRYPTION_KEY` de exemplo com tamanho inválido; o app recusa o valor atual e o antigo.
+    4. Todo build é produção (`!dev`), sem depender do `NODE_ENV`.
+    5. Ban gerado no `/setup` vai para a auditoria, pelo mesmo helper do login.
+  - **CI:** o job `browser` rodou pela primeira vez e achou dois problemas. A pasta `test-results/` não existia num checkout limpo. O mais grave: `Referrer-Policy: no-referrer` faz o navegador mandar `Origin: null` em todo POST (especificação Fetch), o CSRF recusava o login, e em produção ninguém entraria. Agora `same-origin` (decisão de Daniel); o CSRF não mudou. Um segundo build com a origem de produção prova que outra origem, inclusive `null`, recebe 403.
+  - **Decisão de Daniel: produção do webmail numa VPS própria** (`survivus-vps01`, OVHcloud BHS). Roteiro e regras no topo deste arquivo e em `docs/decisoes.md`. O `CLAUDE.md` ainda não foi atualizado.
+  - Testes: Worker 191, webmail 98 unitários + 26 HTTP (dois builds), shared 15; Firefox na CI. CI verde nos três jobs (`63afd2a`).
 
 ### Falta
 
 - PR 2: implantação do Worker (tarefa 7): feito e mergeado.
-- PR 3, feito no branch (2026-11-01): app SvelteKit, CLI, testes unitários, testes HTTP contra o build e testes do Firefox na CI. Navegador só na CI (sem `sudo` no servidor). TypeScript 6 só no `apps/webmail`. Versões do kit ainda as anteriores (acima).
-- PR 3: atualizar o kit e o adapter (condição do merge), revisão e merge.
+- PR 3 (#24, rascunho, CI verde): falta só atualizar o kit e o adapter em 2026-11-06 (condição do merge), a revisão de Daniel e o merge. Depois: deploy do Worker, smoke test e tarefa 8 (Próximo passo, acima).
+- Atualizar o `CLAUDE.md` para a produção na VPS (quando Daniel decidir).
 - Tarefa 8 (conta real): o usuário do seed é **`danielcraft221`**, não `daniel`. O comando é `WEBMAIL_ORIGIN=http://localhost:5173 pnpm admin user:reset danielcraft221` (link para o `pnpm dev` pelo túnel; `docs/admin-cli.md`).
 
 ## Etapa 4: concluída (2026-10-31)
