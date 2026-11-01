@@ -73,3 +73,16 @@ describe("useTotpStep", () => {
     expect(useTotpStep(db, user.id, 101)).toBe(true);
   });
 });
+
+describe("openDb", () => {
+  it("creates the database files for the owner only", async () => {
+    const { mkdtempSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const dir = mkdtempSync(join(tmpdir(), "webmail-db-"));
+    const db = openDb(join(dir, "sub", "webmail.db"));
+    createSession(db, user, "ip", 0);
+    for (const file of ["sub", "sub/webmail.db", "sub/webmail.db-wal"])
+      expect(statSync(join(dir, file)).mode & 0o077).toBe(0);
+  });
+});

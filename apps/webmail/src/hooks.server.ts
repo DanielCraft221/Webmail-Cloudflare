@@ -1,5 +1,9 @@
 import { error } from "@sveltejs/kit";
-import type { Handle, ServerInit } from "@sveltejs/kit/hooks";
+import type {
+  Handle,
+  HandleServerError,
+  ServerInit,
+} from "@sveltejs/kit/hooks";
 import { ctx, initContext } from "#lib/server/context.ts";
 import { SESSION_COOKIE } from "#lib/server/cookie.ts";
 import { parseIp } from "#lib/server/ip.ts";
@@ -72,7 +76,8 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (!session) event.cookies.delete(SESSION_COOKIE, { path: "/" });
     else {
       let user: SessionUser | null = session.user;
-      if (now - session.checkedAt >= RECHECK_AFTER) {
+      // Logout always works, even when the API is down.
+      if (path !== "/logout" && now - session.checkedAt >= RECHECK_AFTER) {
         let me: Awaited<ReturnType<typeof api.me>>;
         try {
           me = await api.me(user.id);
@@ -101,4 +106,14 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   return secure(await resolve(event), config.production, path);
+};
+
+/** Unexpected errors: only their kind goes to the log, never the message (it could carry input). */
+export const handleError: HandleServerError = ({ kind, error, event }) => {
+  if (kind !== "unknown") return;
+  log("error", "unexpected_error", {
+    route: event.route.id,
+    kind: error instanceof Error ? error.name : typeof error,
+  });
+  return { message: "Erro interno." };
 };

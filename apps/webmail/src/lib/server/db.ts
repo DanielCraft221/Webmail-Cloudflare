@@ -46,9 +46,15 @@ CREATE TABLE IF NOT EXISTS setup_pending (
 export function openDb(path = defaultDbPath()): DatabaseSync {
   if (path !== ":memory:")
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const db = new DatabaseSync(path);
-  // The CLI opens the same file while the webmail runs.
-  db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
-  db.exec(SCHEMA);
-  return db;
+  // Owner-only files (the database and its -wal/-shm), whatever the umask of the shell.
+  const umask = process.umask(0o077);
+  try {
+    const db = new DatabaseSync(path);
+    // The CLI opens the same file while the webmail runs.
+    db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
+    db.exec(SCHEMA);
+    return db;
+  } finally {
+    process.umask(umask);
+  }
 }
