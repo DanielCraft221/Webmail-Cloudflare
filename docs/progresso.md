@@ -8,7 +8,9 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 
 PR 2 (`etapa-5/worker-deploy`), `docs/cloudflare.md` seção 9, cada passo na Cloudflare com o "ok" de Daniel:
 - Feito: `admin.env` e `webmail.env` criados (9.1); `ADMIN_API_TOKEN` gravado no Worker (9.2).
-- Falta: marcador do Time Travel (9.3), migração `0003` remota e deploy (9.4), testes com `curl` e `scripts/smoke-api.sh`.
+- Feito: migração `0003` no D1 remoto (2026-11-01). Conferido: nenhuma pendente, colunas e índices novos existem, contagens iguais antes e depois (1 usuário, 7 mensagens, 3 caixas; `audit_log` vazio).
+- **Ponto de restauração** (Time Travel, lido às 2026-11-01T12:41:14Z, logo antes da migração, válido até 2026-12-01): `00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. Comando: `wrangler d1 time-travel restore webmail-db --bookmark=00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. **Restaurar volta o D1 inteiro**: e-mails recebidos depois do marcador perdem a linha no D1 (o `.eml` fica no R2). Usar só logo depois de uma migração com problema; mais tarde, só com um plano de reprocessamento (`docs/cloudflare.md`, seção 9.3).
+- Falta: deploy (9.4), testes com `curl` e `scripts/smoke-api.sh`.
 
 ## Etapa 5: em andamento
 
