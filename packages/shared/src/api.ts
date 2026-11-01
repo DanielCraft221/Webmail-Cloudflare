@@ -161,4 +161,32 @@ export const meResponse = z.object({
   username,
   displayName: z.string().nullable(),
   role,
+  /** Last change to the user (reset, setup, PATCH): sessions created before it are dropped. */
+  updatedAt: z.iso.datetime().nullable(),
 });
+
+/** Admin responses (docs/api.md). The CLI parses them; the fake Worker in the webmail tests returns them. */
+export const adminUser = z.object({
+  id: messageId,
+  username,
+  displayName: z.string().nullable(),
+  role,
+  active: z.boolean(),
+  hasPassword: z.boolean(),
+  hasTotp: z.boolean(),
+  setupExpiresAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string().nullable(),
+});
+export const adminUsersResponse = z.object({ users: z.array(adminUser) });
+export const auditEvent = z.object({
+  id: z.number(),
+  createdAt: z.string(),
+  source: z.enum(["cli", "webmail"]),
+  actorUserId: z.string().nullable(),
+  action: z.string(),
+  target: z.string().nullable(),
+  ip: z.string().nullable(),
+  detail: z.record(z.string(), z.unknown()).nullable(),
+});
+export const auditListResponse = z.object({ events: z.array(auditEvent) });

@@ -285,6 +285,88 @@ Não há opção para excluir esses campos. O `redact_query_string` do `wrangler
 
 **Riscos aceitos:**
 - **Quem compromete o webmail lê todas as caixas.** A permissão por caixa confia no `X-Webmail-User` que o webmail manda (vale desde a Etapa 3). O token de admin separado só impede criar usuários e resetar o 2FA.
-- **Bloqueio por username permite negar acesso:** um atacante pode manter um username bloqueado. Com 4 usuários e a CLI para liberar, aceito. O ban por IP é a defesa principal.
+- **Bloqueio por username:** revisto depois da revisão independente do PR 3 (seção abaixo). O bloqueio global só sai com muitos IPs ao mesmo tempo.
 - **Rate limit compartilhado das rotas de serviço:** `/v1/auth/*` e `/v1/audit` dividem uma chave (`service`, 100 por minuto). Um ataque distribuído que passe pelos bans do webmail pode atrasar o login de todos. Com 4 usuários, aceito.
 - **Etapa 7:** a CLI precisa do SQLite de dentro do container (sessões e bans). O jeito de rodá-la lá fica para a Etapa 7.
+
+## TypeScript 6 só no webmail
+
+O repositório usa o TypeScript 7.0.2 na raiz (`mail-core` e `shared`). O `apps/webmail` tem o seu próprio `typescript` **6.0.3**.
+
+**Motivo:** o pacote `typescript` 7 não exporta mais a API em JavaScript (só a versão e uma API `unstable`). O `@sveltejs/kit` 3.1.0 chama `ts.readConfigFile(..., ts.sys.readFile)` ao ler o `tsconfig` e quebra no `vite build` e no `svelte-kit sync` (`Cannot read properties of undefined (reading 'readFile')`). O `svelte-check` 4.7.7 recusa o 7 sem o 6 instalado ao lado. Os dois declaram `typescript` `^6` como peer. Testado em 2026-11-01.
+
+**Rever** quando o `@sveltejs/kit` e o `svelte-check` aceitarem o TypeScript 7. Aí o `typescript` sai do `apps/webmail` e ele volta a usar o da raiz.
+
+## Webmail: decisões do PR 3 da Etapa 5
+
+**Senha e código no mesmo formulário da configuração.** O link mostra o QR code; a senha, a confirmação e o código vão juntos. O plano anterior guardava a senha em andamento no SQLite por até 10 minutos; assim ela nunca é guardada. Só o segredo TOTP fica em andamento (10 minutos), preso ao link.
+
+**Testes no navegador só na CI.** O Firefox do Playwright pede 153 pacotes do sistema (`playwright install-deps`, com `sudo`), entre eles um servidor X. Neste servidor, que é o de produção e roda o Minecraft, não instalamos. Os testes que não precisam de navegador (CSRF, cookie, cabeçalhos, bans, fluxos por HTTP contra o build) rodam aqui em todo `pnpm test`. O job `browser` da CI usa o Worker falso e nenhum secret.
+
+**Lista de padrões proibidos** (`apps/webmail/test/forbidden-patterns.test.ts`): `{@html}`, `src/params.*`, o hook `reroute`, `query`/`form`/`command`/`prerender` de `$app/server` e `router.resolution` `'server'`. Os quatro últimos são o que os avisos de segurança do kit 3.1.1 corrigem; o `{@html}` pularia o escape do Svelte. Cada item tem o motivo no teste.
+
+**Para a Etapa 6: o webmail nunca devolve ao navegador a resposta crua de um `fetch` ao Worker.** Ele lê, confere com o schema e monta a resposta dele, com os cabeçalhos dele, inclusive no download de anexos. Motivo: o aviso de segurança do adapter-node 6.0.1 (o servidor cai ao repassar certas respostas de `fetch`) e não deixar um cabeçalho do Worker chegar ao navegador sem passar por nós.
+
+**Bloqueio por username: por username + bloco de IP, mais um limite global (muda a etapa-5.md).** A regra da etapa-5.md ("5 falhas em 15 minutos bloqueiam o username de qualquer IP") deixava qualquer pessoa trancar um username para sempre, de um IP só: 5 tentativas a cada 15 minutos (~20 por hora) ficam abaixo do ban de IP (10 em 15 minutos), e o username do administrador (`danielcraft221`, o do seed) está no repositório público. Agora:
+- 5 falhas em 15 minutos de um mesmo bloco de IP (o IPv4, ou o **`/48`** do IPv6) bloqueiam o username **só para esse bloco**, por 15 minutos, sem rodar o argon2;
+- 50 falhas em 15 minutos somando todos os IPs bloqueiam o username para todos, por 15 minutos. Isso exige uns 13 IPv4 ou 13 blocos `/48` ao mesmo tempo, cada um a caminho do próprio ban;
+- **Por que `/48` no bloqueio e `/64` no ban:** a Hurricane Electric (tunnelbroker) dá um `/48` de graça. Contado por `/64`, uma pessoa só alcançaria o bloqueio global com 13 blocos do próprio `/48`. O ban por IP continua por `/64`, para não banir vizinhos de um provedor que divide um `/48` entre clientes;
+- tentativas durante um bloqueio **não contam**: não renovam nem estendem o bloqueio (o ban por IP continua contando);
+- `lock:clear` libera o bloqueio global e o de todos os blocos de IP do username.
+A força bruta continua inviável: argon2, TOTP obrigatório e ban por IP.
+
+**Todo build é produção (`!dev`), sem depender do `NODE_ENV` (muda a etapa-5.md).** A etapa-5.md ligava as travas de produção ao `NODE_ENV=production`. Se o compose da Etapa 7 esquecesse a variável, o app subia sem exigir o `CF-Connecting-IP`: o IP passava a ser o do cloudflared (um ban derrubaria todo mundo) e o HSTS sumia. Agora só o `vite dev` não é produção; o `NODE_ENV` não muda nada.
+
+**Sessões depois de um reset.** Três camadas, cada uma com teste:
+1. O Worker responde `401` no grupo usuário (inclusive `GET /v1/me`) quando falta `password_hash` ou `totp_secret_enc`: entre o reset e a nova configuração, nenhuma sessão lê nada, mesmo que a CLI tenha apagado as sessões num SQLite diferente do container.
+2. Concluir a configuração pelo webmail apaga as sessões do usuário (já existia) e recomeça o histórico de passos TOTP (o segredo é novo).
+3. `GET /v1/me` devolve o `updatedAt` do usuário (reset, configuração e `PATCH` atualizam). Na revalidação, o webmail apaga toda sessão criada antes dele. Cobre o D1 mudar sem passar por este SQLite (outra instância, CLI com outro arquivo, `PATCH` de papel).
+Efeito colateral aceito: qualquer `PATCH` (papel, nome, reativação) derruba as sessões do usuário. A comparação usa o relógio do servidor contra o do D1: com o NTP ligado, a diferença é de milissegundos.
+
+**CLI roda do código-fonte com o Node** (sem `tsx` nem build): o Node 24 tira os tipos sozinho. Por isso o `packages/shared` importa com extensão `.ts` e o código evita sintaxe que não é só tipo (`erasableSyntaxOnly`).
+
+## Produção do webmail numa VPS própria (decisão de Daniel, 2026-11-01)
+
+**Decisão.** A produção do webmail sai do servidor de casa e vai para uma VPS da OVHcloud no Canadá (BHS): `survivus-vps01`, Debian 13, 2 vCPU, 4 GB de RAM, 40 GB NVMe, backup diário.
+
+**O que roda em cada máquina:**
+- **VPS:** exclusiva do webmail. Só Docker, o webmail e o cloudflared.
+- **Servidor de casa:** vira o servidor de desenvolvimento. Minecraft, NodeBB e os outros sites continuam nele.
+- **Claude Code roda só no servidor de casa e nunca acessa a VPS**: nem por SSH, nem por nenhum outro meio.
+
+**Rede da VPS: nenhuma porta aberta.**
+- O webmail chega pelo Cloudflare Tunnel.
+- O SSH só pelo Tailscale. A VPS tem a etiqueta `tag:vps`, sem acesso à tailnet (ela não alcança as outras máquinas).
+- Daniel prepara a VPS sozinho, na **Etapa 0-VPS**, no fim da Etapa 6.
+
+**Deploy:**
+- A CI monta a imagem e publica no GHCR. Daniel faz o pull na VPS, **por digest** (nunca por tag).
+- **Nenhuma credencial da VPS vai para o GitHub.** A CI publica; quem puxa e sobe é Daniel, na VPS.
+
+**Segredos que nunca vão para a VPS:** o `ADMIN_API_TOKEN` e o token do Wrangler.
+- A CLI de usuários (`user:*`, `audit:list`) roda em casa, contra a API do Worker.
+- Na VPS, a CLI só mexe no que é local ao webmail (sessões, bans e bloqueios), dentro do container.
+- Consequência: se a VPS for comprometida, o atacante não cria usuário, não reseta 2FA e não faz deploy do Worker.
+
+**Ordem do roteiro:** Etapa 5 → Etapa 6 (em casa) → Etapa 0-VPS → Etapa 7 (primeiro deploy, só leitura) → Etapas 8 a 12, cada uma com um deploy pequeno.
+
+**Anotações para a Etapa 7:**
+- cloudflared com `--protocol http2`: o firewall de borda da OVH não deixa passar QUIC.
+- Limites de memória e CPU no compose dimensionados para 4 GB (a VPS não divide RAM com o Minecraft, mas é menor).
+- Testar o cookie `__Host-` no Chrome com o HTTPS real.
+
+**Pendências desta decisão (não feitas agora, por escolha de Daniel):**
+- O `CLAUDE.md` ainda descreve a produção no servidor de casa ("O servidor de produção é a mesma máquina onde você roda", diagrama da arquitetura, limites para 16 GB). Ele continua valendo até ser atualizado; a atualização fica para quando Daniel decidir.
+- Nada do código do PR 3 muda por causa desta decisão.
+
+## `Referrer-Policy: same-origin`, não `no-referrer` (2026-11-01)
+
+**Problema.** Com `Referrer-Policy: no-referrer`, o navegador manda **`Origin: null`** em todo POST que não é CORS, ou seja, em todo formulário (especificação Fetch, "append a request `Origin` header": política `"no-referrer"` → `null`). O CSRF do SvelteKit compara o `Origin` com a origem gravada no build e responde `403 Cross-site POST form submissions are forbidden`. Em produção, ninguém conseguiria entrar. O job `browser` da CI achou o problema; os testes HTTP não achavam, porque mandam o `Origin` à mão.
+
+**Decisão (Daniel).** `Referrer-Policy: same-origin` em todas as respostas. A checagem de CSRF fica exatamente como estava: nenhuma origem extra em `csrf.trustedOrigins`, nada afrouxado. Com `same-origin`, links para outros sites continuam sem `Referer` (como antes); só os pedidos para o próprio webmail levam `Referer` e o `Origin` verdadeiro. Muda a lista de cabeçalhos da etapa-5.md (corrigida).
+
+**Testes:** o cabeçalho é `same-origin` em todas as respostas (páginas, 404, 400 sem IP). Um POST com `Origin` diferente da gravada (outro site, `null`, `http://localhost:4173`) recebe `403` no build de teste e no build com a origem de produção (`test-results/build-prod`, montado pelo `test:http`).
+
+**Para a Etapa 6:** o `<iframe>` do e-mail usa `referrerpolicy="no-referrer"`, e os links do e-mail usam `rel="noopener noreferrer"`. Assim o remetente nunca recebe o endereço do webmail, mesmo com a política `same-origin` na página.
+
+**Para a Etapa 7:** a imagem Docker é construída com `ORIGIN=https://webmail.survivus.com.br` (a origem fica gravada no build e é a origem do CSRF). A CI confere isso antes de publicar no GHCR: sobe a imagem e verifica que um POST com essa origem passa da checagem e que qualquer outra origem recebe `403`. Nenhuma origem de teste vai para essa imagem: os builds de teste (`localhost:4173`) existem só dentro dos jobs de teste.
