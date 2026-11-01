@@ -285,7 +285,7 @@ Não há opção para excluir esses campos. O `redact_query_string` do `wrangler
 
 **Riscos aceitos:**
 - **Quem compromete o webmail lê todas as caixas.** A permissão por caixa confia no `X-Webmail-User` que o webmail manda (vale desde a Etapa 3). O token de admin separado só impede criar usuários e resetar o 2FA.
-- **Bloqueio por username permite negar acesso:** um atacante pode manter um username bloqueado. Com 4 usuários e a CLI para liberar, aceito. O ban por IP é a defesa principal.
+- **Bloqueio por username:** revisto depois da revisão independente do PR 3 (seção abaixo). O bloqueio global só sai com muitos IPs ao mesmo tempo.
 - **Rate limit compartilhado das rotas de serviço:** `/v1/auth/*` e `/v1/audit` dividem uma chave (`service`, 100 por minuto). Um ataque distribuído que passe pelos bans do webmail pode atrasar o login de todos. Com 4 usuários, aceito.
 - **Etapa 7:** a CLI precisa do SQLite de dentro do container (sessões e bans). O jeito de rodá-la lá fica para a Etapa 7.
 
@@ -306,5 +306,20 @@ O repositório usa o TypeScript 7.0.2 na raiz (`mail-core` e `shared`). O `apps/
 **Lista de padrões proibidos** (`apps/webmail/test/forbidden-patterns.test.ts`): `{@html}`, `src/params.*`, o hook `reroute`, `query`/`form`/`command`/`prerender` de `$app/server` e `router.resolution` `'server'`. Os quatro últimos são o que os avisos de segurança do kit 3.1.1 corrigem; o `{@html}` pularia o escape do Svelte. Cada item tem o motivo no teste.
 
 **Para a Etapa 6: o webmail nunca devolve ao navegador a resposta crua de um `fetch` ao Worker.** Ele lê, confere com o schema e monta a resposta dele, com os cabeçalhos dele, inclusive no download de anexos. Motivo: o aviso de segurança do adapter-node 6.0.1 (o servidor cai ao repassar certas respostas de `fetch`) e não deixar um cabeçalho do Worker chegar ao navegador sem passar por nós.
+
+**Bloqueio por username: por username + bloco de IP, mais um limite global (muda a etapa-5.md).** A regra da etapa-5.md ("5 falhas em 15 minutos bloqueiam o username de qualquer IP") deixava qualquer pessoa trancar um username para sempre, de um IP só: 5 tentativas a cada 15 minutos (~20 por hora) ficam abaixo do ban de IP (10 em 15 minutos), e o `daniel` aparece nos documentos públicos. Agora:
+- 5 falhas em 15 minutos de um mesmo bloco de IP (o IPv4, ou o `/64` do IPv6) bloqueiam o username **só para esse bloco**, por 15 minutos, sem rodar o argon2;
+- 50 falhas em 15 minutos somando todos os IPs bloqueiam o username para todos, por 15 minutos. Isso exige uns 13 IPs ao mesmo tempo, cada um a caminho do próprio ban;
+- tentativas durante um bloqueio **não contam**: não renovam nem estendem o bloqueio (o ban por IP continua contando);
+- `lock:clear` libera o bloqueio global e o de todos os blocos de IP do username.
+A força bruta continua inviável: argon2, TOTP obrigatório e ban por IP.
+
+**Todo build é produção (`!dev`), sem depender do `NODE_ENV` (muda a etapa-5.md).** A etapa-5.md ligava as travas de produção ao `NODE_ENV=production`. Se o compose da Etapa 7 esquecesse a variável, o app subia sem exigir o `CF-Connecting-IP`: o IP passava a ser o do cloudflared (um ban derrubaria todo mundo) e o HSTS sumia. Agora só o `vite dev` não é produção; o `NODE_ENV` não muda nada.
+
+**Sessões depois de um reset.** Três camadas, cada uma com teste:
+1. O Worker responde `401` no grupo usuário (inclusive `GET /v1/me`) quando falta `password_hash` ou `totp_secret_enc`: entre o reset e a nova configuração, nenhuma sessão lê nada, mesmo que a CLI tenha apagado as sessões num SQLite diferente do container.
+2. Concluir a configuração pelo webmail apaga as sessões do usuário (já existia) e recomeça o histórico de passos TOTP (o segredo é novo).
+3. `GET /v1/me` devolve o `updatedAt` do usuário (reset, configuração e `PATCH` atualizam). Na revalidação, o webmail apaga toda sessão criada antes dele. Cobre o D1 mudar sem passar por este SQLite (outra instância, CLI com outro arquivo, `PATCH` de papel).
+Efeito colateral aceito: qualquer `PATCH` (papel, nome, reativação) derruba as sessões do usuário. A comparação usa o relógio do servidor contra o do D1: com o NTP ligado, a diferença é de milissegundos.
 
 **CLI roda do código-fonte com o Node** (sem `tsx` nem build): o Node 24 tira os tipos sozinho. Por isso o `packages/shared` importa com extensão `.ts` e o código evita sintaxe que não é só tipo (`erasableSyntaxOnly`).
