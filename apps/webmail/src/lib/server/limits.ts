@@ -4,7 +4,10 @@ import type { DatabaseSync } from "node:sqlite";
 const MINUTE = 60_000;
 export const FAILURE_WINDOW = 15 * MINUTE;
 export const IP_FAILURES = 10;
-export const USER_FAILURES = 5;
+/** Per username and IP block: one IP alone can only lock the username for itself. */
+export const USER_IP_FAILURES = 5;
+/** Per username from every IP together: needs many IPs, each one also heading for a ban. */
+export const USER_FAILURES = 50;
 export const LOCK_DURATION = 15 * MINUTE;
 /** First ban 15 min; further bans within 7 days: 1 h, then 24 h. */
 export const BAN_STEPS = [15 * MINUTE, 60 * MINUTE, 24 * 60 * MINUTE] as const;
@@ -29,15 +32,24 @@ export function banUntil(
   return row ? Number(row.until) : null;
 }
 
+/** Lock key for one username and one IP block (ipKey): "<userKey>:<ipKey>". */
+function pairKey(username: string, ipKey: string): string {
+  return `${userKey(username)}:${ipKey}`;
+}
+
+/** The username lock that applies to this IP block: the global one or the one for the pair. */
 export function lockUntil(
   db: DatabaseSync,
-  key: string,
+  username: string,
+  ipKey: string,
   now: number,
 ): number | null {
   const row = db
-    .prepare("SELECT until FROM locks WHERE user_key = ? AND until > ?")
-    .get(key, now);
-  return row ? Number(row.until) : null;
+    .prepare(
+      "SELECT max(until) AS until FROM locks WHERE user_key IN (?, ?) AND until > ?",
+    )
+    .get(userKey(username), pairKey(username, ipKey), now);
+  return row?.until == null ? null : Number(row.until);
 }
 
 function count(
@@ -81,29 +93,65 @@ export function ipFailure(
   return length;
 }
 
-/** Records a failed login for a username. Returns true when this failure locks it. */
+/**
+ * Records a failed login for a username from an IP block. Returns which lock this failure
+ * starts: "global" (every IP), "ip" (only this IP block) or null. Callers skip it while a
+ * lock is active, so attempts during a lock never extend it.
+ */
 export function userFailure(
   db: DatabaseSync,
-  key: string,
+  username: string,
+  ipKey: string,
   now: number,
-): boolean {
-  db.prepare("INSERT INTO failures (kind, key, at) VALUES ('user', ?, ?)").run(
-    key,
-    now,
-  );
-  if (count(db, "user", key, now - FAILURE_WINDOW) < USER_FAILURES)
-    return false;
-  db.prepare(
-    "INSERT OR REPLACE INTO locks (user_key, until) VALUES (?, ?)",
-  ).run(key, now + LOCK_DURATION);
-  db.prepare("DELETE FROM failures WHERE kind = 'user' AND key = ?").run(key);
-  return true;
+): "global" | "ip" | null {
+  const checks = [
+    ["user", userKey(username), USER_FAILURES, "global"],
+    ["user_ip", pairKey(username, ipKey), USER_IP_FAILURES, "ip"],
+  ] as const;
+  for (const [kind, key] of checks)
+    db.prepare("INSERT INTO failures (kind, key, at) VALUES (?, ?, ?)").run(
+      kind,
+      key,
+      now,
+    );
+  for (const [kind, key, limit, scope] of checks) {
+    if (count(db, kind, key, now - FAILURE_WINDOW) < limit) continue;
+    db.prepare(
+      "INSERT OR REPLACE INTO locks (user_key, until) VALUES (?, ?)",
+    ).run(key, now + LOCK_DURATION);
+    db.prepare("DELETE FROM failures WHERE kind = ? AND key = ?").run(
+      kind,
+      key,
+    );
+    return scope;
+  }
+  return null;
 }
 
-export function clearUser(db: DatabaseSync, key: string): number {
-  db.prepare("DELETE FROM failures WHERE kind = 'user' AND key = ?").run(key);
+/** After a successful login: forgets the failures of the username and of this IP block. */
+export function clearUserFailures(
+  db: DatabaseSync,
+  username: string,
+  ipKey: string,
+) {
+  db.prepare(
+    "DELETE FROM failures WHERE (kind = 'user' AND key = ?) OR (kind = 'user_ip' AND key = ?)",
+  ).run(userKey(username), pairKey(username, ipKey));
+}
+
+/** CLI lock:clear: the global lock and the locks of every IP block, with their failures. Returns the locks removed. */
+export function clearUser(db: DatabaseSync, username: string): number {
+  const key = userKey(username);
+  const prefix = `${key}:`;
+  db.prepare(
+    "DELETE FROM failures WHERE (kind = 'user' AND key = ?1) OR (kind = 'user_ip' AND substr(key, 1, length(?2)) = ?2)",
+  ).run(key, prefix);
   return Number(
-    db.prepare("DELETE FROM locks WHERE user_key = ?").run(key).changes,
+    db
+      .prepare(
+        "DELETE FROM locks WHERE user_key = ?1 OR substr(user_key, 1, length(?2)) = ?2",
+      )
+      .run(key, prefix).changes,
   );
 }
 

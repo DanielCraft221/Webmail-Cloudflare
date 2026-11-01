@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { openDb } from "../src/lib/server/db.ts";
 import { ipKey } from "../src/lib/server/ip.ts";
-import { addBan, userKey } from "../src/lib/server/limits.ts";
+import { addBan, lockUntil } from "../src/lib/server/limits.ts";
 import {
   attemptLogin,
   BANNED_ERROR,
@@ -221,30 +221,70 @@ describe("attemptLogin", () => {
     expect(next).toMatchObject({ status: 429 });
   });
 
-  it("locks a username after 5 failures, from any IP, without argon2", async () => {
+  it("locks a username for one IP after 5 failures, without argon2; other IPs still log in", async () => {
     const t = setup();
     (t.api.authLookup as ReturnType<typeof vi.fn>).mockResolvedValue(
       t.user(ANA),
     );
+    const wrong = { username: "ana", password: "wrong", code: "000000" };
     for (let i = 0; i < 5; i++)
-      await attemptLogin(t.deps, `198.51.100.${i}`, {
-        username: "ana",
-        password: "wrong",
-        code: "000000",
-      });
-    expect(t.audits.some((a) => a.action === "username_lock")).toBe(true);
-    t.verifyPassword.mockClear();
-    const result = await attemptLogin(t.deps, "192.0.2.50", {
-      username: "ana",
-      password: "right password",
-      code: code(),
+      await attemptLogin(t.deps, "198.51.100.7", wrong);
+    expect(t.audits.find((a) => a.action === "username_lock")).toMatchObject({
+      detail: { scope: "ip" },
     });
-    expect(result).toEqual({ ok: false, status: 400, message: GENERIC_ERROR });
+    t.verifyPassword.mockClear();
+    const right = { username: "ana", password: "right password", code: code() };
+    expect(await attemptLogin(t.deps, "198.51.100.7", right)).toEqual({
+      ok: false,
+      status: 400,
+      message: GENERIC_ERROR,
+    });
     expect(t.verifyPassword).not.toHaveBeenCalled();
+    expect(await attemptLogin(t.deps, "192.0.2.50", right)).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it("attempts during a lock do not extend it", async () => {
+    const t = setup();
+    let clock = NOW;
+    t.deps.now = () => clock;
+    const wrong = { username: "ana", password: "wrong", code: "000000" };
+    for (let i = 0; i < 5; i++)
+      await attemptLogin(t.deps, "198.51.100.8", wrong);
+    const until = lockUntil(t.deps.db, "ana", ipKey("198.51.100.8"), clock);
+    expect(until).toBe(NOW + 15 * 60_000);
+    // Five more while locked (the last one also bans the IP), enough to lock again if counted.
+    for (const at of [1, 2, 3, 4, 14.9]) {
+      clock = NOW + at * 60_000;
+      await attemptLogin(t.deps, "198.51.100.8", wrong);
+    }
+    expect(lockUntil(t.deps.db, "ana", ipKey("198.51.100.8"), clock)).toBe(
+      until,
+    );
+    clock = NOW + 15 * 60_000;
     expect(
-      t.deps.db
-        .prepare("SELECT count(*) AS n FROM locks WHERE user_key = ?")
-        .get(userKey("ana"))?.n,
-    ).toBe(1);
+      lockUntil(t.deps.db, "ana", ipKey("198.51.100.8"), clock),
+    ).toBeNull();
+  });
+
+  it("locks a username for every IP after 50 failures from many IPs", async () => {
+    const t = setup();
+    (t.api.authLookup as ReturnType<typeof vi.fn>).mockResolvedValue(
+      t.user(ANA),
+    );
+    const wrong = { username: "ana", password: "wrong", code: "000000" };
+    // 4 failures from each of 13 IPs: no IP lock, no IP ban, 52 failures for the username.
+    for (let n = 0; n < 13; n++)
+      for (let i = 0; i < 4; i++)
+        await attemptLogin(t.deps, `203.0.113.${n}`, wrong);
+    expect(t.audits.find((a) => a.action === "username_lock")).toMatchObject({
+      detail: { scope: "global" },
+    });
+    const right = { username: "ana", password: "right password", code: code() };
+    expect(await attemptLogin(t.deps, "192.0.2.51", right)).toMatchObject({
+      ok: false,
+      status: 400,
+    });
   });
 });

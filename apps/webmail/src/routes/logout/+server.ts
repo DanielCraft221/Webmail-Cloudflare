@@ -1,7 +1,7 @@
 import { redirect } from "@sveltejs/kit";
+import { audit } from "#lib/server/audit.ts";
 import { ctx } from "#lib/server/context.ts";
 import { SESSION_COOKIE } from "#lib/server/cookie.ts";
-import { log } from "#lib/server/log.ts";
 import { deleteSession } from "#lib/server/sessions.ts";
 import type { RequestHandler } from "./$types";
 
@@ -10,14 +10,12 @@ export const POST: RequestHandler = ({ locals, cookies }) => {
   const { db, api } = ctx();
   if (locals.sessionHash && locals.user) {
     deleteSession(db, locals.sessionHash);
-    api
-      .audit({
-        action: "logout",
-        actorUserId: locals.user.id,
-        target: locals.user.username,
-        ip: locals.ip,
-      })
-      .catch(() => log("error", "audit_failed", { action: "logout" }));
+    audit(api, {
+      action: "logout",
+      actorUserId: locals.user.id,
+      target: locals.user.username,
+      ip: locals.ip,
+    });
   }
   cookies.delete(SESSION_COOKIE, { path: "/" });
   redirect(303, "/login");

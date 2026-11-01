@@ -135,10 +135,22 @@ describe("pnpm admin", () => {
     await admin("ban:remove", "2001:db8:9:9::7");
     expect(banUntil(db, ipKey("2001:db8:9:9::1"), Date.now())).toBeNull();
 
-    for (let i = 0; i < 5; i++) userFailure(db, userKey("ana"), Date.now());
-    expect(lockUntil(db, userKey("ana"), Date.now())).not.toBeNull();
-    await admin("lock:clear", "ana");
-    expect(lockUntil(db, userKey("ana"), Date.now())).toBeNull();
+    const now = Date.now();
+    const [a, b] = [ipKey("198.51.100.1"), ipKey("198.51.100.2")];
+    for (let i = 0; i < 5; i++) userFailure(db, "ana", a, now);
+    for (let i = 0; i < 5; i++) userFailure(db, "ana", b, now);
+    db.prepare("INSERT INTO locks (user_key, until) VALUES (?, ?)").run(
+      userKey("ana"),
+      now + 60_000,
+    );
+    expect(lockUntil(db, "ana", a, now)).not.toBeNull();
+    expect(lockUntil(db, "ana", b, now)).not.toBeNull();
+    expect(await admin("lock:clear", "ana")).toMatchObject({
+      text: expect.stringContaining("Bloqueio removido"),
+    });
+    expect(lockUntil(db, "ana", a, now)).toBeNull();
+    expect(lockUntil(db, "ana", b, now)).toBeNull();
+    expect(lockUntil(db, "ana", ipKey("192.0.2.9"), now)).toBeNull();
 
     const actions = fake.store.audit
       .filter((e) => e.source === "cli")

@@ -1,16 +1,14 @@
 import type { DatabaseSync } from "node:sqlite";
 import { api as schema } from "@webmail/shared";
+import { audit, recordIpFailure } from "./audit.ts";
 import { ipKey } from "./ip.ts";
 import {
   banUntil,
-  clearUser,
-  ipFailure,
+  clearUserFailures,
   lockUntil,
   prune,
   userFailure,
-  userKey,
 } from "./limits.ts";
-import { log } from "./log.ts";
 import { MAX_PASSWORD } from "./password.ts";
 import { decryptSecret } from "./secret-box.ts";
 import {
@@ -47,13 +45,6 @@ export function isBanned(
   return banUntil(deps.db, ipKey(ip), deps.now()) !== null;
 }
 
-/** Fire and forget: an API hiccup must not change the login answer. */
-function audit(api: WebmailApi, body: Parameters<WebmailApi["audit"]>[0]) {
-  api
-    .audit(body)
-    .catch(() => log("error", "audit_failed", { action: body.action }));
-}
-
 /**
  * One form, one answer: every failure returns GENERIC_ERROR, so nobody learns whether the
  * password was right. Throws Argon2Busy (503) and ApiError (502) to the caller.
@@ -71,12 +62,14 @@ export async function attemptLogin(
 
   const username = input.username.trim().toLowerCase();
   const code = input.code.replace(/\s/g, "");
-  const ukey = userKey(username);
   const validName = schema.username.safeParse(username).success;
+  const locked = validName && lockUntil(deps.db, username, ipk, now) !== null;
 
   const fail = (reason: string, user: { id: string } | null): LoginResult => {
-    const banLength = ipFailure(deps.db, ipk, now);
-    const locked = validName && userFailure(deps.db, ukey, now);
+    recordIpFailure(deps.db, deps.api, ip, now);
+    // While a lock is active, failures are not counted: they would only extend it.
+    const lock =
+      validName && !locked ? userFailure(deps.db, username, ipk, now) : null;
     // The typed username is sent only when it exists: it might be a password typed in the wrong field.
     audit(deps.api, {
       action: "login_failure",
@@ -85,25 +78,18 @@ export async function attemptLogin(
       ip,
       detail: { reason },
     });
-    if (banLength !== null)
-      audit(deps.api, {
-        action: "ip_ban",
-        ip,
-        target: ipk,
-        detail: { minutes: banLength / 60_000 },
-      });
-    if (locked)
+    if (lock)
       audit(deps.api, {
         action: "username_lock",
         actorUserId: user?.id ?? null,
         ...(user ? { target: username } : {}),
         ip,
+        detail: { scope: lock },
       });
     return { ok: false, status: 400, message: GENERIC_ERROR };
   };
 
-  if (lockUntil(deps.db, ukey, now) !== null)
-    return fail("username_locked", null);
+  if (locked) return fail("username_locked", null);
 
   const user = validName ? await deps.api.authLookup(username) : null;
   const usable =
@@ -136,7 +122,7 @@ export async function attemptLogin(
   )
     return fail("code_reused", user);
 
-  clearUser(deps.db, ukey);
+  clearUserFailures(deps.db, username, ipk);
   const me = { id: user.id, username, displayName: null, role: user.role };
   const token = createSession(deps.db, me, ip, now);
   audit(deps.api, {

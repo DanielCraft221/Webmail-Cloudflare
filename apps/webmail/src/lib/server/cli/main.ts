@@ -5,7 +5,7 @@ import { api as schema } from "@webmail/shared";
 import type { z } from "zod";
 import { defaultDbPath, openDb } from "../db.ts";
 import { ipKey, parseIp } from "../ip.ts";
-import { addBan, clearUser, listBans, removeBan, userKey } from "../limits.ts";
+import { addBan, clearUser, listBans, removeBan } from "../limits.ts";
 import {
   deleteSessionById,
   deleteUserSessions,
@@ -315,7 +315,8 @@ export async function run(
     }
     case "lock:clear": {
       const username = arg(positionals, 1, "o username").trim().toLowerCase();
-      const cleared = clearUser(cli.db(), userKey(username));
+      // The global lock and the lock of every IP block.
+      const cleared = clearUser(cli.db(), username);
       await localAudit(cli, {
         action: "username_unlock",
         target: username,

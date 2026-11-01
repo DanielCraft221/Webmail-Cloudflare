@@ -74,21 +74,22 @@ test("two IPv6 addresses of the same /64 count together", async ({
   ).toBe(400);
 });
 
-test("5 failures on a username lock it from any IP", async ({ request }) => {
+test("5 failures on a username lock it for that IP only", async ({
+  request,
+}) => {
   const user = await readyUser(request, "e2e-lock");
+  const ip = freshIp();
   for (let i = 0; i < 5; i++)
-    await post(request, "/login", wrong(user.username), freshIp());
+    await post(request, "/login", wrong(user.username), ip);
   const code = totp(user.secret, 1);
   remember(code);
-  const res = await post(
-    request,
-    "/login",
-    { username: user.username, password: user.password, code },
-    freshIp(),
-  );
-  expect(res.status()).toBe(400);
-  expect(await res.text()).toContain(GENERIC);
+  const right = { username: user.username, password: user.password, code };
+  const locked = await post(request, "/login", right, ip);
+  expect(locked.status()).toBe(400);
+  expect(await locked.text()).toContain(GENERIC);
   expect(
     (await auditEvents(request)).some((e) => e.action === "username_lock"),
   ).toBe(true);
+  // Same username from another IP: the owner still gets in.
+  expect((await post(request, "/login", right, freshIp())).status()).toBe(303);
 });

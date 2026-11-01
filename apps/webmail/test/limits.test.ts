@@ -5,9 +5,11 @@ import {
   BAN_STEPS,
   banUntil,
   clearUser,
+  clearUserFailures,
   ipFailure,
   lockUntil,
   removeBan,
+  USER_FAILURES,
   userFailure,
   userKey,
 } from "../src/lib/server/limits.ts";
@@ -60,15 +62,47 @@ describe("IP bans", () => {
 });
 
 describe("username locks", () => {
-  it("locks after 5 failures and clears", () => {
+  const A = ipKey("198.51.100.1");
+  const B = ipKey("198.51.100.2");
+
+  it("locks a username for one IP block after 5 failures from it", () => {
     const db = openDb(":memory:");
-    const key = userKey(" Ana ");
-    expect(key).toBe(userKey("ana"));
-    for (let i = 0; i < 4; i++) expect(userFailure(db, key, i)).toBe(false);
-    expect(userFailure(db, key, 4)).toBe(true);
-    expect(lockUntil(db, key, 5)).toBe(4 + 15 * MINUTE);
-    expect(lockUntil(db, key, 4 + 15 * MINUTE)).toBeNull();
-    expect(clearUser(db, key)).toBe(1);
-    expect(lockUntil(db, key, 5)).toBeNull();
+    expect(userKey(" Ana ")).toBe(userKey("ana"));
+    for (let i = 0; i < 4; i++) expect(userFailure(db, "ana", A, i)).toBeNull();
+    expect(userFailure(db, "ana", A, 4)).toBe("ip");
+    expect(lockUntil(db, "ana", A, 5)).toBe(4 + 15 * MINUTE);
+    expect(lockUntil(db, "ana", A, 4 + 15 * MINUTE)).toBeNull();
+    // Another IP block, or the same block for another username, is not locked.
+    expect(lockUntil(db, "ana", B, 5)).toBeNull();
+    expect(lockUntil(db, "bia", A, 5)).toBeNull();
+  });
+
+  it("counts the IPv6 /64 as one block", () => {
+    const db = openDb(":memory:");
+    for (let i = 0; i < 5; i++)
+      userFailure(db, "ana", ipKey(`2001:db8:1:2::${i + 1}`), i);
+    expect(lockUntil(db, "ana", ipKey("2001:db8:1:2::ffff"), 5)).not.toBeNull();
+    expect(lockUntil(db, "ana", ipKey("2001:db8:1:3::1"), 5)).toBeNull();
+  });
+
+  it("locks the username for every IP after 50 failures from many IPs", () => {
+    const db = openDb(":memory:");
+    let scope: string | null = null;
+    for (let i = 0; i < USER_FAILURES; i++)
+      scope = userFailure(db, "ana", ipKey(`203.0.113.${i}`), i);
+    expect(scope).toBe("global");
+    expect(lockUntil(db, "ana", ipKey("192.0.2.1"), 60)).not.toBeNull();
+  });
+
+  it("a success clears the counts; the CLI clears every lock of the username", () => {
+    const db = openDb(":memory:");
+    for (let i = 0; i < 4; i++) userFailure(db, "ana", A, i);
+    clearUserFailures(db, "ana", A);
+    expect(userFailure(db, "ana", A, 10)).toBeNull();
+    for (let i = 0; i < 5; i++) userFailure(db, "ana", B, 20 + i);
+    for (let i = 0; i < 5; i++) userFailure(db, "bia", B, 20 + i);
+    expect(clearUser(db, "ana")).toBe(1);
+    expect(lockUntil(db, "ana", B, 30)).toBeNull();
+    expect(lockUntil(db, "bia", B, 30)).not.toBeNull();
   });
 });
