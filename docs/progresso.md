@@ -10,7 +10,9 @@ PR 2 (`etapa-5/worker-deploy`), `docs/cloudflare.md` seção 9, cada passo na Cl
 - Feito: `admin.env` e `webmail.env` criados (9.1); `ADMIN_API_TOKEN` gravado no Worker (9.2).
 - Feito: migração `0003` no D1 remoto (2026-11-01). Conferido: nenhuma pendente, colunas e índices novos existem, contagens iguais antes e depois (1 usuário, 7 mensagens, 3 caixas; `audit_log` vazio).
 - **Ponto de restauração** (Time Travel, lido às 2026-11-01T12:41:14Z, logo antes da migração, válido até 2026-12-01): `00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. Comando: `wrangler d1 time-travel restore webmail-db --bookmark=00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. **Restaurar volta o D1 inteiro**: e-mails recebidos depois do marcador perdem a linha no D1 (o `.eml` fica no R2). Usar só logo depois de uma migração com problema; mais tarde, só com um plano de reprocessamento (`docs/cloudflare.md`, seção 9.3).
-- Falta: deploy (9.4), testes com `curl` e `scripts/smoke-api.sh`.
+- Feito: deploy da `main` (`37d76bf`) em 2026-11-01. Versão anterior (código da Etapa 4 + secret novo): `2f832b04-2e59-440f-8f27-21fb6481d567`. Versão nova: `4ff110af-0455-4efa-b587-389197cb89ae`. Rollback: `pnpm exec wrangler rollback 2f832b04-2e59-440f-8f27-21fb6481d567`.
+- `scripts/smoke-api.sh` ganhou os testes de `GET /v1/me` e da separação dos tokens (lê só o `ADMIN_API_TOKEN` do `admin.env`).
+- Falta: Daniel roda `scripts/smoke-api.sh` (passo 6). Depois: push, PR 2, merge.
 
 ## Etapa 5: em andamento
 

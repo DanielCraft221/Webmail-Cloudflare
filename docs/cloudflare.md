@@ -37,6 +37,12 @@ O servidor não tem navegador, então o Wrangler usa um API Token em vez do `wra
 
 Ao renovar o token, atualize o inventário em `docs/segredos.md`.
 
+### Confirmações do wrangler não protegem nada
+
+Quando o Claude roda o wrangler, não há terminal interativo: toda confirmação é aprovada sozinha (`Using fallback value in non-interactive context: yes`). Isso vale para `d1 time-travel restore`, `d1 delete`, `d1 migrations apply` e qualquer outra pergunta "continue?".
+
+**A única trava é o "ok" de Daniel no chat.** Antes de qualquer comando destrutivo (restauração, exclusão, migração), o Claude mostra a versão só de leitura do que será afetado (por exemplo `d1 migrations list --remote`, `d1 time-travel info`, contagens de linhas), mostra o comando e espera o "ok".
+
 ## 2. Recursos (criados em 2026-10-28)
 
 ```bash
@@ -234,6 +240,7 @@ Medido em 2026-10-29: o `wrangler deploy` manteve o Custom Domain criado pelo pa
 - caixas, leitura de uma mensagem e download de um anexo, com os cabeçalhos de download;
 - `PATCH` de lida, conferindo a contagem de não lidas, e `PATCH` com pasta inválida (`400`);
 - `POST /v1/search` acha a mensagem pelo assunto, e `GET /v1/search` dá `404`;
+- `GET /v1/me` e a separação dos tokens: o interno recebe `401` em `/v1/admin/*`; o de admin lista usuários e auditoria sem segredos e recebe `401` nas caixas. Lê só o `ADMIN_API_TOKEN` do `~/.config/webmail/admin.env`; sem ele, `SKIP`;
 - `workers.dev` desligado.
 
 Como funciona:
