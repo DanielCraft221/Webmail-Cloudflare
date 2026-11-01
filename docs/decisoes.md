@@ -358,3 +358,15 @@ Efeito colateral aceito: qualquer `PATCH` (papel, nome, reativação) derruba as
 **Pendências desta decisão (não feitas agora, por escolha de Daniel):**
 - O `CLAUDE.md` ainda descreve a produção no servidor de casa ("O servidor de produção é a mesma máquina onde você roda", diagrama da arquitetura, limites para 16 GB). Ele continua valendo até ser atualizado; a atualização fica para quando Daniel decidir.
 - Nada do código do PR 3 muda por causa desta decisão.
+
+## `Referrer-Policy: same-origin`, não `no-referrer` (2026-11-01)
+
+**Problema.** Com `Referrer-Policy: no-referrer`, o navegador manda **`Origin: null`** em todo POST que não é CORS, ou seja, em todo formulário (especificação Fetch, "append a request `Origin` header": política `"no-referrer"` → `null`). O CSRF do SvelteKit compara o `Origin` com a origem gravada no build e responde `403 Cross-site POST form submissions are forbidden`. Em produção, ninguém conseguiria entrar. O job `browser` da CI achou o problema; os testes HTTP não achavam, porque mandam o `Origin` à mão.
+
+**Decisão (Daniel).** `Referrer-Policy: same-origin` em todas as respostas. A checagem de CSRF fica exatamente como estava: nenhuma origem extra em `csrf.trustedOrigins`, nada afrouxado. Com `same-origin`, links para outros sites continuam sem `Referer` (como antes); só os pedidos para o próprio webmail levam `Referer` e o `Origin` verdadeiro. Muda a lista de cabeçalhos da etapa-5.md (corrigida).
+
+**Testes:** o cabeçalho é `same-origin` em todas as respostas (páginas, 404, 400 sem IP). Um POST com `Origin` diferente da gravada (outro site, `null`, `http://localhost:4173`) recebe `403` no build de teste e no build com a origem de produção (`test-results/build-prod`, montado pelo `test:http`).
+
+**Para a Etapa 6:** o `<iframe>` do e-mail usa `referrerpolicy="no-referrer"`, e os links do e-mail usam `rel="noopener noreferrer"`. Assim o remetente nunca recebe o endereço do webmail, mesmo com a política `same-origin` na página.
+
+**Para a Etapa 7:** a imagem Docker é construída com `ORIGIN=https://webmail.survivus.com.br` (a origem fica gravada no build e é a origem do CSRF). A CI confere isso antes de publicar no GHCR: sobe a imagem e verifica que um POST com essa origem passa da checagem e que qualquer outra origem recebe `403`. Nenhuma origem de teste vai para essa imagem: os builds de teste (`localhost:4173`) existem só dentro dos jobs de teste.

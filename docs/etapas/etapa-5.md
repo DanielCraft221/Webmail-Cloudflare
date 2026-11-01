@@ -121,7 +121,7 @@ Mantêm o JWT do Access e o bearer em tempo constante. Mudam só o token aceito 
 - **Se o cabeçalho faltar ou for inválido em produção → 400.** Nunca usar o IP do cloudflared: senão um ban derrubaria todo mundo.
 - Em produção (`NODE_ENV=production`), o app **não sobe** se a configuração não estiver confiando no `CF-Connecting-IP`. No desenvolvimento, usa o IP do socket.
 
-**Cabeçalhos:** CSP restrita (`default-src 'self'`, `img-src 'self' data:`, `frame-ancestors 'none'`, `form-action 'self'`, `base-uri 'none'`, `object-src 'none'`), `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `Permissions-Policy` fechada, `Cache-Control: no-store` nas páginas logadas, `ORIGIN` explícito, proteção de CSRF do SvelteKit ligada. Em produção, também `Strict-Transport-Security`.
+**Cabeçalhos:** CSP restrita (`default-src 'self'`, `img-src 'self' data:`, `frame-ancestors 'none'`, `form-action 'self'`, `base-uri 'none'`, `object-src 'none'`), `Referrer-Policy: same-origin` (não `no-referrer`: ele faz o navegador mandar `Origin: null` em todo POST e o CSRF recusa o login; `docs/decisoes.md`), `X-Content-Type-Options: nosniff`, `Permissions-Policy` fechada, `Cache-Control: no-store` nas páginas logadas, `ORIGIN` explícito, proteção de CSRF do SvelteKit ligada. Em produção, também `Strict-Transport-Security`.
 
 **Auditoria:** login com sucesso ou falha (com o motivo interno, que nunca aparece para o usuário), ban, desban, configuração concluída e logout vão para o `POST /v1/audit`. **Tentativa com username inexistente não grava o username digitado**: as pessoas às vezes digitam a senha no campo do usuário.
 
