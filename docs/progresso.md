@@ -2,7 +2,7 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 5 (em andamento: PR 2, implantação do Worker)
+## Etapa atual: 5 (em andamento: PR 2 em revisão)
 
 ### Próximo passo
 
@@ -12,7 +12,8 @@ PR 2 (`etapa-5/worker-deploy`), `docs/cloudflare.md` seção 9, cada passo na Cl
 - **Ponto de restauração** (Time Travel, lido às 2026-11-01T12:41:14Z, logo antes da migração, válido até 2026-12-01): `00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. Comando: `wrangler d1 time-travel restore webmail-db --bookmark=00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. **Restaurar volta o D1 inteiro**: e-mails recebidos depois do marcador perdem a linha no D1 (o `.eml` fica no R2). Usar só logo depois de uma migração com problema; mais tarde, só com um plano de reprocessamento (`docs/cloudflare.md`, seção 9.3).
 - Feito: deploy da `main` (`37d76bf`) em 2026-11-01. Versão anterior (código da Etapa 4 + secret novo): `2f832b04-2e59-440f-8f27-21fb6481d567`. Versão nova: `4ff110af-0455-4efa-b587-389197cb89ae`. Rollback: `pnpm exec wrangler rollback 2f832b04-2e59-440f-8f27-21fb6481d567`.
 - `scripts/smoke-api.sh` ganhou os testes de `GET /v1/me` e da separação dos tokens (lê só o `ADMIN_API_TOKEN` do `admin.env`).
-- Falta: Daniel roda `scripts/smoke-api.sh` (passo 6). Depois: push, PR 2, merge.
+- `scripts/smoke-api.sh` rodado por Daniel depois do deploy: 20 PASS.
+- Falta: Daniel revisa e faz o merge do PR 2. Depois: `git pull --ff-only origin main` e PR 3 (`etapa-5/webmail`), começando pelo teste do SvelteKit e do `svelte-check` com o TypeScript 7.0.2.
 
 ## Etapa 5: em andamento
 

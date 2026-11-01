@@ -254,7 +254,13 @@ Ele precisa do UUID de um usuário que lê pelo menos uma caixa, no `api.env`. N
 printf 'SMOKE_USER_ID=%s\n' b2a98933-aa45-4af9-b0f3-dd58c4283e7b >> ~/.config/webmail/api.env
 ```
 
-Rode da raiz do repositório. Com o token do Wrangler carregado, ele também confere o `workers.dev`:
+Rode da raiz do repositório:
+
+```bash
+scripts/smoke-api.sh
+```
+
+O `wrangler.env` é **opcional** e serve só para o check do `workers.dev` (o token vai ao `curl` por `--header @<(...)`, nunca em argumento). Sem ele, o script pula esse check (`SKIP`) e roda todo o resto. Para incluir o check:
 
 ```bash
 (
