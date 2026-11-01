@@ -6,9 +6,17 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 
 ### Próximo passo
 
+**PR 3 aguardando o `@sveltejs/kit` 3.1.1 (liberado em 2026-11-05) e o `@sveltejs/adapter-node` 6.0.1 (liberado em 2026-11-06).** Não começar a Etapa 6 antes do merge.
+
 1. Daniel revisa o PR 3 (`etapa-5/webmail`). **Condição dura para o merge: atualizar antes para `@sveltejs/kit` 3.1.1 e `@sveltejs/adapter-node` 6.0.1** (seis avisos de segurança corrigidos; `docs/webmail-auth.md`). A regra de 7 dias do pnpm libera o kit em 2026-11-05 e o adapter em 2026-11-06 (o `svelte` 5.57.3 em 2026-11-02). Se o PR estiver pronto antes, ele espera.
-2. Para atualizar: trocar as três versões em `apps/webmail/package.json`, `pnpm install`, `pnpm lint && pnpm typecheck && pnpm test`, commit no próprio branch e conferir o job `browser` da CI.
-3. Depois do merge: tarefa 8 (conta real), com o "ok" de Daniel antes do `user:reset` (mexe no D1 de produção).
+2. Revisão independente (sessão só leitura, 2026-11-01): 5 achados, os 5 corrigidos no branch (commits `9de60e3`..`41351c4`, com teste e mutação; `docs/decisoes.md`). Claude Security ainda não rodou (falta o Workflow).
+3. O job `browser` da CI ainda não rodou: o `ci.yml` só dispara em `pull_request` e em push na `main`. Daniel abre o PR: https://github.com/DanielCraft221/Webmail-Cloudflare/compare/main...etapa-5/webmail
+4. Para atualizar: trocar as três versões em `apps/webmail/package.json`, `pnpm install`, `pnpm lint && pnpm typecheck && pnpm test`, commit no próprio branch e conferir o job `browser` da CI.
+5. Depois do merge, **nesta ordem** (o PR 3 agora muda o Worker: 401 para usuário sem senha ou 2FA e `updatedAt` no `GET /v1/me`; sem migração):
+   1. Deploy do Worker da `main` limpa (mostrar o comando e esperar o "ok"; anotar a versão anterior para o rollback). Tem de vir antes da tarefa 8: o webmail novo exige o `updatedAt` no `/v1/me`.
+   2. `scripts/smoke-api.sh` logo depois: **as checagens com o `SMOKE_USER_ID` (grupo usuário) vão dar 401**, porque o `danielcraft221` ainda não tem senha. Esperado. Access, tokens e rotas de serviço têm de passar; qualquer outra falha → rollback.
+   3. Tarefa 8 (conta real), com o "ok" de Daniel antes do `user:reset` (mexe no D1 de produção).
+   4. `scripts/smoke-api.sh` de novo: tudo PASS.
 
 ## Etapa 5: em andamento
 
