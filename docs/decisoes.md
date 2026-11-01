@@ -288,3 +288,23 @@ Não há opção para excluir esses campos. O `redact_query_string` do `wrangler
 - **Bloqueio por username permite negar acesso:** um atacante pode manter um username bloqueado. Com 4 usuários e a CLI para liberar, aceito. O ban por IP é a defesa principal.
 - **Rate limit compartilhado das rotas de serviço:** `/v1/auth/*` e `/v1/audit` dividem uma chave (`service`, 100 por minuto). Um ataque distribuído que passe pelos bans do webmail pode atrasar o login de todos. Com 4 usuários, aceito.
 - **Etapa 7:** a CLI precisa do SQLite de dentro do container (sessões e bans). O jeito de rodá-la lá fica para a Etapa 7.
+
+## TypeScript 6 só no webmail
+
+O repositório usa o TypeScript 7.0.2 na raiz (`mail-core` e `shared`). O `apps/webmail` tem o seu próprio `typescript` **6.0.3**.
+
+**Motivo:** o pacote `typescript` 7 não exporta mais a API em JavaScript (só a versão e uma API `unstable`). O `@sveltejs/kit` 3.1.0 chama `ts.readConfigFile(..., ts.sys.readFile)` ao ler o `tsconfig` e quebra no `vite build` e no `svelte-kit sync` (`Cannot read properties of undefined (reading 'readFile')`). O `svelte-check` 4.7.7 recusa o 7 sem o 6 instalado ao lado. Os dois declaram `typescript` `^6` como peer. Testado em 2026-11-01.
+
+**Rever** quando o `@sveltejs/kit` e o `svelte-check` aceitarem o TypeScript 7. Aí o `typescript` sai do `apps/webmail` e ele volta a usar o da raiz.
+
+## Webmail: decisões do PR 3 da Etapa 5
+
+**Senha e código no mesmo formulário da configuração.** O link mostra o QR code; a senha, a confirmação e o código vão juntos. O plano anterior guardava a senha em andamento no SQLite por até 10 minutos; assim ela nunca é guardada. Só o segredo TOTP fica em andamento (10 minutos), preso ao link.
+
+**Testes no navegador só na CI.** O Firefox do Playwright pede 153 pacotes do sistema (`playwright install-deps`, com `sudo`), entre eles um servidor X. Neste servidor, que é o de produção e roda o Minecraft, não instalamos. Os testes que não precisam de navegador (CSRF, cookie, cabeçalhos, bans, fluxos por HTTP contra o build) rodam aqui em todo `pnpm test`. O job `browser` da CI usa o Worker falso e nenhum secret.
+
+**Lista de padrões proibidos** (`apps/webmail/test/forbidden-patterns.test.ts`): `{@html}`, `src/params.*`, o hook `reroute`, `query`/`form`/`command`/`prerender` de `$app/server` e `router.resolution` `'server'`. Os quatro últimos são o que os avisos de segurança do kit 3.1.1 corrigem; o `{@html}` pularia o escape do Svelte. Cada item tem o motivo no teste.
+
+**Para a Etapa 6: o webmail nunca devolve ao navegador a resposta crua de um `fetch` ao Worker.** Ele lê, confere com o schema e monta a resposta dele, com os cabeçalhos dele, inclusive no download de anexos. Motivo: o aviso de segurança do adapter-node 6.0.1 (o servidor cai ao repassar certas respostas de `fetch`) e não deixar um cabeçalho do Worker chegar ao navegador sem passar por nós.
+
+**CLI roda do código-fonte com o Node** (sem `tsx` nem build): o Node 24 tira os tipos sozinho. Por isso o `packages/shared` importa com extensão `.ts` e o código evita sintaxe que não é só tipo (`erasableSyntaxOnly`).
