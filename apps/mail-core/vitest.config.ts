@@ -14,6 +14,7 @@ export default defineConfig({
           ACCESS_AUD: "test-aud",
           ACCESS_CLIENT_ID: "test-client.access",
           INTERNAL_API_TOKEN: "test-bearer",
+          ADMIN_API_TOKEN: "test-admin-bearer",
         },
       },
     })),
