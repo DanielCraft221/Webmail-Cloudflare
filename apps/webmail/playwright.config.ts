@@ -36,9 +36,10 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      // A fresh SQLite each run; the log is read by e2e/logs.spec.ts.
+      // A fresh SQLite each run; the log is read by e2e/logs.spec.ts. test-results/ is
+      // git-ignored, so a fresh checkout (CI) does not have it until mkdir.
       command:
-        "rm -f test-results/e2e.db* test-results/secrets.txt && node build > test-results/app.log 2>&1",
+        "mkdir -p test-results && rm -f test-results/e2e.db* test-results/secrets.txt && node build > test-results/app.log 2>&1",
       // 400: no CF-Connecting-IP on the readiness probe, which is the expected answer.
       url: `http://127.0.0.1:${APP_PORT}/login`,
       env: APP_ENV,
