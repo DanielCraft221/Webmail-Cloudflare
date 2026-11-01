@@ -82,6 +82,22 @@ describe("setup link", () => {
     ).toBe(0);
   });
 
+  it("a new secret forgets the steps used with the old one", async () => {
+    const t = make();
+    // The old secret accepted a later step (clock ahead, or a login just before the reset).
+    t.deps.db
+      .prepare("INSERT INTO totp_used (user_id, last_step) VALUES (?, ?)")
+      .run(ANA, stepAt(t.now()) + 1);
+    const secret =
+      (await loadSetup(t.deps, "203.0.113.7", TOKEN))?.secret ?? "";
+    await completeSetup(t.deps, "203.0.113.7", TOKEN, {
+      password: "a long enough password",
+      confirm: "a long enough password",
+      code: hotp(base32Decode(secret), stepAt(t.now())),
+    });
+    expect(lastTotpStep(t.deps.db, ANA)).toBe(stepAt(t.now()));
+  });
+
   it("refuses a short password, different confirmation and wrong code", async () => {
     const t = make();
     const secret =
@@ -106,6 +122,29 @@ describe("setup link", () => {
         (await completeSetup(t.deps, "203.0.113.7", TOKEN, input)).ok,
       ).toBe(false);
     expect(t.api.setupComplete).not.toHaveBeenCalled();
+  });
+
+  it("audits the IP ban started by wrong links, like the login does", async () => {
+    const t = make();
+    for (let i = 0; i < 10; i++)
+      await loadSetup(t.deps, "203.0.113.70", "y".repeat(43));
+    expect(t.api.audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "ip_ban", ip: "203.0.113.70" }),
+    );
+  });
+
+  it("audits the IP ban started by wrong codes", async () => {
+    const t = make();
+    await loadSetup(t.deps, "203.0.113.71", TOKEN);
+    for (let i = 0; i < 10; i++)
+      await completeSetup(t.deps, "203.0.113.71", TOKEN, {
+        password: "a long enough password",
+        confirm: "a long enough password",
+        code: "000000",
+      });
+    expect(t.api.audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "ip_ban", ip: "203.0.113.71" }),
+    );
   });
 
   it("reports the link as invalid when the API says 404 (already used)", async () => {

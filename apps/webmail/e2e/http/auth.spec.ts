@@ -1,12 +1,15 @@
 import { expect, test } from "@playwright/test";
 import {
   auditEvents,
+  completeLink,
+  completeOnWorker,
   freshIp,
   GENERIC,
   get,
   post,
   readyUser,
   remember,
+  resetUser,
   sessionCookie,
   setActive,
   totp,
@@ -136,4 +139,61 @@ test("a user disabled after login loses the session on the next check", async ({
   expect((await get(request, "/", ip, cookie)).headers().location).toBe(
     "/login",
   );
+});
+
+test("a reset and a new setup drop the old session; the new secret logs in", async ({
+  request,
+}) => {
+  const user = await readyUser(request, "e2e-reset");
+  const ip = freshIp();
+  const code = totp(user.secret, 1);
+  remember(code);
+  const login = await post(
+    request,
+    "/login",
+    { username: user.username, password: user.password, code },
+    ip,
+  );
+  const stolen = sessionCookie(login.headers()["set-cookie"]);
+  // Reset and setup again before the webmail checks the session: /v1/me answers 200 again.
+  const secret = await completeLink(
+    request,
+    await resetUser(request, user.id),
+    user.password,
+  );
+  const home = await get(request, "/", ip, stolen);
+  expect(home.status()).toBe(303);
+  expect(home.headers().location).toBe("/login");
+  // A login after the new setup keeps working.
+  const fresh = totp(secret, 1);
+  remember(fresh);
+  const again = await post(
+    request,
+    "/login",
+    { username: user.username, password: user.password, code: fresh },
+    ip,
+  );
+  const cookie = sessionCookie(again.headers()["set-cookie"]);
+  expect((await get(request, "/", ip, cookie)).status()).toBe(200);
+});
+
+test("on the next check, sessions created before the user's last change are dropped", async ({
+  request,
+}) => {
+  const user = await readyUser(request, "e2e-changed");
+  const ip = freshIp();
+  const code = totp(user.secret, 1);
+  remember(code);
+  const login = await post(
+    request,
+    "/login",
+    { username: user.username, password: user.password, code },
+    ip,
+  );
+  const stolen = sessionCookie(login.headers()["set-cookie"]);
+  // Reset and setup done without this webmail: /v1/me answers 200, only updatedAt moved.
+  await completeOnWorker(request, await resetUser(request, user.id));
+  const home = await get(request, "/", ip, stolen);
+  expect(home.status()).toBe(303);
+  expect(home.headers().location).toBe("/login");
 });

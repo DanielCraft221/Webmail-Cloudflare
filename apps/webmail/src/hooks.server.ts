@@ -9,6 +9,7 @@ import { SESSION_COOKIE } from "#lib/server/cookie.ts";
 import { parseIp } from "#lib/server/ip.ts";
 import { log } from "#lib/server/log.ts";
 import {
+  deleteSessionsBefore,
   deleteUserSessions,
   getSession,
   markChecked,
@@ -85,7 +86,13 @@ export const handle: Handle = async ({ event, resolve }) => {
           log("error", "me_check_failed");
           error(503, "Serviço indisponível. Tente de novo em instantes.");
         }
-        if (me) {
+        // Changed in D1 after this session started (reset, setup, role): every older session goes.
+        const changedAt = me?.updatedAt ? Date.parse(me.updatedAt) : null;
+        if (me && changedAt !== null && session.createdAt < changedAt) {
+          deleteSessionsBefore(db, me.id, changedAt);
+          event.cookies.delete(SESSION_COOKIE, { path: "/" });
+          user = null;
+        } else if (me) {
           user = {
             id: me.id,
             username: me.username,

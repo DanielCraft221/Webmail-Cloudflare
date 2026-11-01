@@ -4,6 +4,7 @@ import {
   ABSOLUTE_LIMIT,
   createSession,
   deleteSessionById,
+  deleteSessionsBefore,
   getSession,
   hashToken,
   IDLE_LIMIT,
@@ -20,6 +21,22 @@ const user = {
 };
 
 describe("sessions", () => {
+  it("drops only the user's sessions created before a cutoff", () => {
+    const db = openDb(":memory:");
+    const old = createSession(db, user, "203.0.113.7", 1_000);
+    const fresh = createSession(db, user, "203.0.113.7", 3_000);
+    const other = createSession(
+      db,
+      { ...user, id: "22222222-2222-4222-8222-222222222222" },
+      "203.0.113.8",
+      1_000,
+    );
+    expect(deleteSessionsBefore(db, user.id, 2_000)).toBe(1);
+    expect(getSession(db, old, 3_000)).toBeNull();
+    expect(getSession(db, fresh, 3_000)?.createdAt).toBe(3_000);
+    expect(getSession(db, other, 3_000)).not.toBeNull();
+  });
+
   it("stores only the SHA-256 of the token", () => {
     const db = openDb(":memory:");
     const token = createSession(db, user, "203.0.113.7", 0);

@@ -17,6 +17,7 @@ export interface SessionUser {
 export interface Session {
   tokenHash: string;
   user: SessionUser;
+  createdAt: number;
   checkedAt: number;
 }
 
@@ -79,6 +80,7 @@ export function getSession(
   );
   return {
     tokenHash,
+    createdAt: Number(row.created_at),
     checkedAt: Number(row.checked_at),
     user: {
       id: String(row.user_id),
@@ -107,6 +109,22 @@ export function deleteSession(db: DatabaseSync, tokenHash: string) {
 export function deleteUserSessions(db: DatabaseSync, userId: string): number {
   return Number(
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId).changes,
+  );
+}
+
+/**
+ * Sessions of the user created before `cutoff` (the user's updated_at in D1). A reset followed
+ * by a new setup between two checks would otherwise leave an old (maybe stolen) session alive.
+ */
+export function deleteSessionsBefore(
+  db: DatabaseSync,
+  userId: string,
+  cutoff: number,
+): number {
+  return Number(
+    db
+      .prepare("DELETE FROM sessions WHERE user_id = ? AND created_at < ?")
+      .run(userId, cutoff).changes,
   );
 }
 
@@ -145,6 +163,17 @@ export function useTotpStep(
     )
     .run(userId, step);
   return Number(result.changes) === 1;
+}
+
+/** A new secret starts a new history: the steps accepted with the old one no longer matter. */
+export function restartTotpSteps(
+  db: DatabaseSync,
+  userId: string,
+  step: number,
+) {
+  db.prepare(
+    "INSERT OR REPLACE INTO totp_used (user_id, last_step) VALUES (?, ?)",
+  ).run(userId, step);
 }
 
 export function lastTotpStep(db: DatabaseSync, userId: string): number {

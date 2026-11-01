@@ -11,6 +11,8 @@ import {
   call,
   DANIEL,
   ecPrivateKey,
+  FAKE_PASSWORD_HASH,
+  FAKE_TOTP_ENC,
   INACTIVE,
   rsaJwk,
   validHeaders,
@@ -236,8 +238,15 @@ describe("rate limit", () => {
 
   it("the real binding stops a user after 100 requests a minute", async () => {
     const user = crypto.randomUUID();
-    await env.DB.prepare("INSERT INTO users (id, username) VALUES (?1, ?2)")
-      .bind(user, `limite-${user.slice(0, 8)}`)
+    await env.DB.prepare(
+      "INSERT INTO users (id, username, password_hash, totp_secret_enc) VALUES (?1, ?2, ?3, ?4)",
+    )
+      .bind(
+        user,
+        `limite-${user.slice(0, 8)}`,
+        FAKE_PASSWORD_HASH,
+        FAKE_TOTP_ENC,
+      )
       .run();
     const statuses: number[] = [];
     for (let i = 0; i < 101; i++) {

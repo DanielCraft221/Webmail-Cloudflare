@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import { audit, recordIpFailure } from "./audit.ts";
 import { ipKey } from "./ip.ts";
-import { banUntil, ipFailure, prune, setupHit } from "./limits.ts";
-import { log } from "./log.ts";
+import { banUntil, prune, setupHit } from "./limits.ts";
 import { passwordProblem } from "./password.ts";
 import { encryptSecret } from "./secret-box.ts";
-import { deleteUserSessions, useTotpStep } from "./sessions.ts";
+import { deleteUserSessions, restartTotpSteps } from "./sessions.ts";
 import { base32Decode, newTotpSecret, verifyTotp } from "./totp.ts";
 import type { WebmailApi } from "./worker-api.ts";
 
@@ -43,7 +43,7 @@ async function validUser(deps: SetupDeps, ip: string, token: string) {
   const hash = setupTokenHash(token);
   const user = hash ? await deps.api.setupLookup(hash) : null;
   if (!user || !hash) {
-    ipFailure(deps.db, ipKey(ip), deps.now());
+    recordIpFailure(deps.db, deps.api, ip, deps.now());
     return null;
   }
   return { ...user, hash };
@@ -111,7 +111,7 @@ export async function completeSetup(
     now,
   );
   if (step === null) {
-    ipFailure(deps.db, ipKey(ip), now);
+    recordIpFailure(deps.db, deps.api, ip, now);
     return {
       ok: false,
       message: "Código inválido. Confira o horário do celular e tente de novo.",
@@ -127,16 +127,14 @@ export async function completeSetup(
   deps.db
     .prepare("DELETE FROM setup_pending WHERE token_hash = ?")
     .run(user.hash);
-  // The confirmation code cannot be reused to log in.
-  useTotpStep(deps.db, user.id, step);
+  // The confirmation code cannot be reused to log in; older steps belonged to the old secret.
+  restartTotpSteps(deps.db, user.id, step);
   deleteUserSessions(deps.db, user.id);
-  deps.api
-    .audit({
-      action: "setup_complete",
-      actorUserId: user.id,
-      target: user.username,
-      ip,
-    })
-    .catch(() => log("error", "audit_failed", { action: "setup_complete" }));
+  audit(deps.api, {
+    action: "setup_complete",
+    actorUserId: user.id,
+    target: user.username,
+    ip,
+  });
   return { ok: true };
 }

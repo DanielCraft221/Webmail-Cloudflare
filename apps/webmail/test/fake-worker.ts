@@ -135,13 +135,16 @@ export function handler(store: Store) {
 
     if (group === "user") {
       const user = store.users.get(String(req.headers["x-webmail-user"] ?? ""));
-      if (!user?.active) return fail(401);
+      // Disabled, or reset and not configured again: 401, like the real Worker.
+      if (!user?.active || !user.passwordHash || !user.totpSecretEnc)
+        return fail(401);
       if (method === "GET" && path === "/v1/me")
         return send(res, 200, {
           id: user.id,
           username: user.username,
           displayName: user.displayName,
           role: user.role,
+          updatedAt: user.updatedAt,
         });
       return fail(404);
     }
@@ -217,7 +220,7 @@ export function handler(store: Store) {
         setupTokenHash: b.setupTokenHash,
         setupExpiresAt: Date.now() + DAY,
         createdAt: new Date().toISOString(),
-        updatedAt: null,
+        updatedAt: new Date().toISOString(),
       };
       store.users.set(u.id, u);
       record(store, {
@@ -242,6 +245,7 @@ export function handler(store: Store) {
           totpSecretEnc: null,
           setupTokenHash: b.setupTokenHash,
           setupExpiresAt: Date.now() + DAY,
+          updatedAt: new Date().toISOString(),
         });
         record(store, {
           source: "cli",
@@ -259,6 +263,7 @@ export function handler(store: Store) {
         if (b.active !== undefined) u.active = b.active;
         if (b.role !== undefined) u.role = b.role;
         if (b.displayName !== undefined) u.displayName = b.displayName;
+        u.updatedAt = new Date().toISOString();
         record(store, {
           source: "cli",
           actorUserId: u.id,

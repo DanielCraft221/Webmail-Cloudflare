@@ -161,6 +161,8 @@ export const meResponse = z.object({
   username,
   displayName: z.string().nullable(),
   role,
+  /** Last change to the user (reset, setup, PATCH): sessions created before it are dropped. */
+  updatedAt: z.iso.datetime().nullable(),
 });
 
 /** Admin responses (docs/api.md). The CLI parses them; the fake Worker in the webmail tests returns them. */
