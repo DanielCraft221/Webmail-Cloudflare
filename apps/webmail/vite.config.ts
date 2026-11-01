@@ -19,7 +19,9 @@ export default defineConfig(() => {
         },
       },
       sveltekit({
-        adapter: adapter(),
+        // BUILD_OUT only moves the output folder (the tests build a second copy with the
+        // production ORIGIN); it changes nothing inside the build.
+        adapter: adapter({ out: process.env.BUILD_OUT || "build" }),
         paths: origin ? { origin } : {},
         // csrf.trustedOrigins stays [] (the default): only our own origin may post forms. Never '*'.
         csp: {

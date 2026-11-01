@@ -12,8 +12,8 @@ const trail = {
 test.beforeEach(async ({ page }) => {
   trail.lastResponse = "";
   trail.messages = [];
-  // Cloudflare's header on every request, form POSTs included: Firefox does not apply
-  // page.setExtraHTTPHeaders to a form submission, and the app answers 400 without it.
+  // Cloudflare's header on every request the page makes, form POSTs included: the app
+  // answers 400 without it.
   const ip = freshIp();
   await page.route("**/*", (route) =>
     route.continue({

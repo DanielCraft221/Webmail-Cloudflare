@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
 import { APP_ENV } from "../../playwright.config.ts";
 import { BASE, freshIp, get, post } from "../helpers.ts";
@@ -57,7 +57,7 @@ for (const path of pages) {
   test(`security headers on ${path}`, async ({ request }) => {
     const res = await get(request, path, freshIp());
     const h = res.headers();
-    expect(h["referrer-policy"]).toBe("no-referrer");
+    expect(h["referrer-policy"]).toBe("same-origin");
     expect(h["x-content-type-options"]).toBe("nosniff");
     expect(h["x-frame-options"]).toBe("DENY");
     expect(h["permissions-policy"]).toContain("camera=()");
@@ -85,6 +85,47 @@ test("the 400 for a missing IP also carries the headers", async ({
   const h = (await request.get(`${BASE}/login`)).headers();
   expect(h["content-security-policy"]).toContain("default-src 'none'");
   expect(h["x-content-type-options"]).toBe("nosniff");
+  expect(h["referrer-policy"]).toBe("same-origin");
+});
+
+test("the build with the production ORIGIN refuses any other Origin (CSRF)", async ({
+  request,
+}) => {
+  // test-results/build-prod: built by test:http with ORIGIN=https://webmail.survivus.com.br.
+  const port = 4197;
+  const app = spawn(process.execPath, ["test-results/build-prod"], {
+    env: {
+      ...APP_ENV,
+      PATH: process.env.PATH,
+      PORT: String(port),
+      WEBMAIL_DB_PATH: "test-results/e2e-prod.db",
+    },
+    stdio: "ignore",
+  });
+  try {
+    const url = `http://127.0.0.1:${port}/login`;
+    for (let i = 0; i < 50; i++) {
+      const up = await request.get(url).catch(() => null);
+      if (up) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    const send = (origin: string) =>
+      request.post(url, {
+        headers: { Origin: origin, "CF-Connecting-IP": freshIp() },
+        form: { username: "a", password: "b", code: "1" },
+        maxRedirects: 0,
+      });
+    for (const origin of [
+      "http://localhost:4173",
+      "null",
+      "https://evil.example",
+    ])
+      expect((await send(origin)).status(), origin).toBe(403);
+    // Its own origin passes the check and reaches the login action (generic 400).
+    expect((await send("https://webmail.survivus.com.br")).status()).toBe(400);
+  } finally {
+    app.kill();
+  }
 });
 
 test("in production the app does not start without trusting CF-Connecting-IP", () => {

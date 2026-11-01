@@ -22,7 +22,9 @@ export const init: ServerInit = async () => {
 };
 
 const SECURITY_HEADERS: Record<string, string> = {
-  "Referrer-Policy": "no-referrer",
+  // Not no-referrer: with it, browsers send `Origin: null` on every form POST (Fetch spec)
+  // and the CSRF check refuses the login. same-origin still sends nothing to other sites.
+  "Referrer-Policy": "same-origin",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Cross-Origin-Opener-Policy": "same-origin",

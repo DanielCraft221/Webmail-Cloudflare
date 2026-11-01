@@ -13,7 +13,7 @@
     "admin": "node src/lib/server/cli/main.ts",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "test": "vitest run && pnpm run test:http",
-    "test:http": "ORIGIN=http://localhost:4173 vite build && playwright test --project=http --project=logs",
+    "test:http": "ORIGIN=http://localhost:4173 vite build && ORIGIN=https://webmail.survivus.com.br BUILD_OUT=test-results/build-prod vite build && playwright test --project=http --project=logs",
     "test:browser": "ORIGIN=http://localhost:4173 vite build && playwright test --project=firefox"
   },
   "dependencies": {
