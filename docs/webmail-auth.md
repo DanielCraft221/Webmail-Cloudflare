@@ -93,7 +93,7 @@ Fonte: [calendário oficial](https://github.com/nodejs/Release/blob/main/schedul
 ### Login
 
 1. **Ban do IP checado primeiro** (IPv6 pelo `/64`), antes de ler o corpo e antes do argon2.
-2. Username bloqueado por excesso de falhas (5 do mesmo bloco de IP, ou 50 de todos os IPs, em 15 minutos): recusa sem argon2, com a mensagem genérica. Tentativas durante o bloqueio não o renovam.
+2. Username bloqueado por excesso de falhas (5 do mesmo IPv4 ou `/48` do IPv6, ou 50 de todos os IPs, em 15 minutos): recusa sem argon2, com a mensagem genérica. Tentativas durante o bloqueio não o renovam.
 3. `POST /v1/auth/lookup`. Usuário inexistente: verificação contra o hash falso, para gastar o mesmo tempo.
 4. Recusa se o usuário estiver inativo ou sem senha ou sem 2FA.
 5. argon2id (no máximo 2 ao mesmo tempo; além disso, `503`), depois o código TOTP (±1 passo, nunca um passo já usado).
@@ -110,7 +110,7 @@ Fonte: [calendário oficial](https://github.com/nodejs/Release/blob/main/schedul
 
 - Produção (todo build; só o `vite dev` não é, qualquer que seja o `NODE_ENV`): só o `CF-Connecting-IP`. Ausente ou inválido: `400`. O app não sobe sem `ADDRESS_HEADER=cf-connecting-ip`.
 - Desenvolvimento: o IP do socket.
-- IPv6 conta pelo bloco `/64` nos limites e nos bans.
+- IPv6 conta pelo bloco `/64` nos bans e no rate limit do `/setup`, e pelo `/48` no bloqueio de username (`docs/decisoes.md`).
 
 ### Testes
 

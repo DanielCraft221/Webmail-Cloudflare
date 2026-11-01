@@ -66,7 +66,7 @@ pnpm admin ban:remove 2001:db8:1:2::5       # IPv6: o ban vale para o /64 inteir
 pnpm admin lock:clear ana                   # libera um username bloqueado por excesso de falhas
 ```
 
-Regras do webmail (`docs/webmail-auth.md`): 10 falhas de um IP em 15 minutos dão ban de 15 min; os bans seguintes em 7 dias duram 1 h e depois 24 h. 5 falhas num username em 15 minutos, do mesmo bloco de IP, o bloqueiam por 15 min só para esse bloco; 50 falhas somando todos os IPs o bloqueiam para todos. `lock:clear` libera os dois (`docs/decisoes.md`).
+Regras do webmail (`docs/webmail-auth.md`): 10 falhas de um IP em 15 minutos dão ban de 15 min; os bans seguintes em 7 dias duram 1 h e depois 24 h. 5 falhas num username em 15 minutos, do mesmo IPv4 ou `/48` do IPv6, o bloqueiam por 15 min só para essa origem; 50 falhas somando todos os IPs o bloqueiam para todos. `lock:clear` libera os dois (`docs/decisoes.md`).
 
 ### Auditoria (D1)
 

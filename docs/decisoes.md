@@ -308,8 +308,9 @@ O repositório usa o TypeScript 7.0.2 na raiz (`mail-core` e `shared`). O `apps/
 **Para a Etapa 6: o webmail nunca devolve ao navegador a resposta crua de um `fetch` ao Worker.** Ele lê, confere com o schema e monta a resposta dele, com os cabeçalhos dele, inclusive no download de anexos. Motivo: o aviso de segurança do adapter-node 6.0.1 (o servidor cai ao repassar certas respostas de `fetch`) e não deixar um cabeçalho do Worker chegar ao navegador sem passar por nós.
 
 **Bloqueio por username: por username + bloco de IP, mais um limite global (muda a etapa-5.md).** A regra da etapa-5.md ("5 falhas em 15 minutos bloqueiam o username de qualquer IP") deixava qualquer pessoa trancar um username para sempre, de um IP só: 5 tentativas a cada 15 minutos (~20 por hora) ficam abaixo do ban de IP (10 em 15 minutos), e o username do administrador (`danielcraft221`, o do seed) está no repositório público. Agora:
-- 5 falhas em 15 minutos de um mesmo bloco de IP (o IPv4, ou o `/64` do IPv6) bloqueiam o username **só para esse bloco**, por 15 minutos, sem rodar o argon2;
-- 50 falhas em 15 minutos somando todos os IPs bloqueiam o username para todos, por 15 minutos. Isso exige uns 13 IPs ao mesmo tempo, cada um a caminho do próprio ban;
+- 5 falhas em 15 minutos de um mesmo bloco de IP (o IPv4, ou o **`/48`** do IPv6) bloqueiam o username **só para esse bloco**, por 15 minutos, sem rodar o argon2;
+- 50 falhas em 15 minutos somando todos os IPs bloqueiam o username para todos, por 15 minutos. Isso exige uns 13 IPv4 ou 13 blocos `/48` ao mesmo tempo, cada um a caminho do próprio ban;
+- **Por que `/48` no bloqueio e `/64` no ban:** a Hurricane Electric (tunnelbroker) dá um `/48` de graça. Contado por `/64`, uma pessoa só alcançaria o bloqueio global com 13 blocos do próprio `/48`. O ban por IP continua por `/64`, para não banir vizinhos de um provedor que divide um `/48` entre clientes;
 - tentativas durante um bloqueio **não contam**: não renovam nem estendem o bloqueio (o ban por IP continua contando);
 - `lock:clear` libera o bloqueio global e o de todos os blocos de IP do username.
 A força bruta continua inviável: argon2, TOTP obrigatório e ban por IP.
