@@ -2,8 +2,53 @@ import { expect, test } from "@playwright/test";
 import { BANNED, createUser, freshIp, GENERIC, totp } from "../helpers.ts";
 
 // Firefox only: it accepts __Host- cookies on http://localhost (docs/webmail-auth.md).
+
+/** What the page did, printed when a test fails: the next CI failure explains itself. */
+const trail = {
+  lastResponse: "",
+  messages: [] as string[],
+};
+
 test.beforeEach(async ({ page }) => {
-  await page.setExtraHTTPHeaders({ "CF-Connecting-IP": freshIp() });
+  trail.lastResponse = "";
+  trail.messages = [];
+  // Cloudflare's header on every request, form POSTs included: Firefox does not apply
+  // page.setExtraHTTPHeaders to a form submission, and the app answers 400 without it.
+  const ip = freshIp();
+  await page.route("**/*", (route) =>
+    route.continue({
+      headers: { ...route.request().headers(), "cf-connecting-ip": ip },
+    }),
+  );
+  page.on("response", (res) => {
+    if (res.request().isNavigationRequest())
+      trail.lastResponse = `${res.request().method()} ${res.url()} -> ${res.status()}`;
+  });
+  // CSP violations show up as console errors or warnings.
+  page.on("console", (msg) => {
+    if (msg.type() === "error" || msg.type() === "warning")
+      trail.messages.push(`console.${msg.type()}: ${msg.text()}`);
+  });
+  page.on("pageerror", (err) =>
+    trail.messages.push(`pageerror: ${err.message}`),
+  );
+});
+
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  const body = await page
+    .locator("body")
+    .innerText()
+    .catch(() => "(no body)");
+  console.log(
+    [
+      `--- ${testInfo.title}: what the page saw`,
+      `last navigation: ${trail.lastResponse || "(none)"}`,
+      `url: ${page.url()}`,
+      `body: ${body.slice(0, 800)}`,
+      ...(trail.messages.length ? trail.messages : ["no console errors"]),
+    ].join("\n"),
+  );
 });
 
 test("setup by link, login, wrong code and logout", async ({
