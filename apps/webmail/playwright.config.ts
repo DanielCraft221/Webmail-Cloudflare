@@ -8,8 +8,8 @@ const API_PORT = 8790;
  * Runs against the production build (`pnpm test:http` builds it with ORIGIN set), as CSRF and
  * __Host- cookies only behave for real there. The API is the fake Worker; secrets are fake.
  */
+// No NODE_ENV on purpose: every build is production (config.ts), whatever NODE_ENV says.
 export const APP_ENV = {
-  NODE_ENV: "production",
   ADDRESS_HEADER: "cf-connecting-ip",
   HOST: "127.0.0.1",
   PORT: String(APP_PORT),

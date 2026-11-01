@@ -10,40 +10,51 @@ const base = {
 };
 
 describe("loadConfig", () => {
-  it("refuses production without ADDRESS_HEADER=cf-connecting-ip", () => {
-    expect(() => loadConfig({ ...base, NODE_ENV: "production" })).toThrow(
-      /ADDRESS_HEADER/,
-    );
+  it("refuses production without ADDRESS_HEADER=cf-connecting-ip, whatever NODE_ENV says", () => {
+    expect(() => loadConfig(true, base)).toThrow(/ADDRESS_HEADER/);
     expect(() =>
-      loadConfig({
-        ...base,
-        NODE_ENV: "production",
-        ADDRESS_HEADER: "x-forwarded-for",
-      }),
+      loadConfig(true, { ...base, NODE_ENV: "development" }),
+    ).toThrow(/ADDRESS_HEADER/);
+    expect(() =>
+      loadConfig(true, { ...base, ADDRESS_HEADER: "x-forwarded-for" }),
     ).toThrow();
     expect(
-      loadConfig({
-        ...base,
-        NODE_ENV: "production",
-        ADDRESS_HEADER: "CF-Connecting-IP",
-      }).production,
+      loadConfig(true, { ...base, ADDRESS_HEADER: "CF-Connecting-IP" })
+        .production,
     ).toBe(true);
   });
-  it("allows the socket address outside production", () => {
-    expect(loadConfig(base).production).toBe(false);
+  it("allows the socket address only in vite dev", () => {
+    expect(
+      loadConfig(false, { ...base, NODE_ENV: "production" }).production,
+    ).toBe(false);
+  });
+  it("refuses the TOTP keys published in .env.example", async () => {
+    const { readFileSync } = await import("node:fs");
+    const example = /^TOTP_ENCRYPTION_KEY=(.*)$/m.exec(
+      readFileSync(new URL("../.env.example", import.meta.url), "utf8"),
+    )?.[1];
+    expect(example).toBeTruthy();
+    for (const key of [example, "ZmFrZS1rZXktZmFrZS1rZXktZmFrZS1rZXktZmFrZSE="])
+      expect(() =>
+        loadConfig(false, { ...base, TOTP_ENCRYPTION_KEY: key }),
+      ).toThrow(/example value/);
   });
   it("refuses a missing value, a short key and plain http to a remote host", () => {
-    expect(() => loadConfig({ ...base, INTERNAL_API_TOKEN: "" })).toThrow(
-      /INTERNAL_API_TOKEN/,
-    );
     expect(() =>
-      loadConfig({ ...base, TOTP_ENCRYPTION_KEY: "c2hvcnQ=" }),
+      loadConfig(false, { ...base, INTERNAL_API_TOKEN: "" }),
+    ).toThrow(/INTERNAL_API_TOKEN/);
+    expect(() =>
+      loadConfig(false, { ...base, TOTP_ENCRYPTION_KEY: "c2hvcnQ=" }),
     ).toThrow(/32 bytes/);
     expect(() =>
-      loadConfig({ ...base, MAIL_API_URL: "http://mail-api.example.test" }),
+      loadConfig(false, {
+        ...base,
+        MAIL_API_URL: "http://mail-api.example.test",
+      }),
     ).toThrow(/https/);
     expect(
-      loadConfig({ ...base, MAIL_API_URL: "http://127.0.0.1:8790" }).api.apiUrl,
+      loadConfig(false, { ...base, MAIL_API_URL: "http://127.0.0.1:8790" }).api
+        .apiUrl,
     ).toBe("http://127.0.0.1:8790");
   });
 });

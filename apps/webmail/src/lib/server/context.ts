@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import { dev } from "$app/env";
 import { type Config, loadConfig } from "./config.ts";
 import { openDb } from "./db.ts";
 import { hashPassword } from "./password.ts";
@@ -17,7 +18,8 @@ let context: AppContext | undefined;
 /** Called from the init hook: a bad config stops the server before it listens. */
 export async function initContext(): Promise<AppContext> {
   if (context) return context;
-  const config = loadConfig();
+  // Every build is production; only `vite dev` is not.
+  const config = loadConfig(!dev);
   context = {
     config,
     db: openDb(),
