@@ -323,3 +323,37 @@ A força bruta continua inviável: argon2, TOTP obrigatório e ban por IP.
 Efeito colateral aceito: qualquer `PATCH` (papel, nome, reativação) derruba as sessões do usuário. A comparação usa o relógio do servidor contra o do D1: com o NTP ligado, a diferença é de milissegundos.
 
 **CLI roda do código-fonte com o Node** (sem `tsx` nem build): o Node 24 tira os tipos sozinho. Por isso o `packages/shared` importa com extensão `.ts` e o código evita sintaxe que não é só tipo (`erasableSyntaxOnly`).
+
+## Produção do webmail numa VPS própria (decisão de Daniel, 2026-11-01)
+
+**Decisão.** A produção do webmail sai do servidor de casa e vai para uma VPS da OVHcloud no Canadá (BHS): `survivus-vps01`, Debian 13, 2 vCPU, 4 GB de RAM, 40 GB NVMe, backup diário.
+
+**O que roda em cada máquina:**
+- **VPS:** exclusiva do webmail. Só Docker, o webmail e o cloudflared.
+- **Servidor de casa:** vira o servidor de desenvolvimento. Minecraft, NodeBB e os outros sites continuam nele.
+- **Claude Code roda só no servidor de casa e nunca acessa a VPS**: nem por SSH, nem por nenhum outro meio.
+
+**Rede da VPS: nenhuma porta aberta.**
+- O webmail chega pelo Cloudflare Tunnel.
+- O SSH só pelo Tailscale. A VPS tem a etiqueta `tag:vps`, sem acesso à tailnet (ela não alcança as outras máquinas).
+- Daniel prepara a VPS sozinho, na **Etapa 0-VPS**, no fim da Etapa 6.
+
+**Deploy:**
+- A CI monta a imagem e publica no GHCR. Daniel faz o pull na VPS, **por digest** (nunca por tag).
+- **Nenhuma credencial da VPS vai para o GitHub.** A CI publica; quem puxa e sobe é Daniel, na VPS.
+
+**Segredos que nunca vão para a VPS:** o `ADMIN_API_TOKEN` e o token do Wrangler.
+- A CLI de usuários (`user:*`, `audit:list`) roda em casa, contra a API do Worker.
+- Na VPS, a CLI só mexe no que é local ao webmail (sessões, bans e bloqueios), dentro do container.
+- Consequência: se a VPS for comprometida, o atacante não cria usuário, não reseta 2FA e não faz deploy do Worker.
+
+**Ordem do roteiro:** Etapa 5 → Etapa 6 (em casa) → Etapa 0-VPS → Etapa 7 (primeiro deploy, só leitura) → Etapas 8 a 12, cada uma com um deploy pequeno.
+
+**Anotações para a Etapa 7:**
+- cloudflared com `--protocol http2`: o firewall de borda da OVH não deixa passar QUIC.
+- Limites de memória e CPU no compose dimensionados para 4 GB (a VPS não divide RAM com o Minecraft, mas é menor).
+- Testar o cookie `__Host-` no Chrome com o HTTPS real.
+
+**Pendências desta decisão (não feitas agora, por escolha de Daniel):**
+- O `CLAUDE.md` ainda descreve a produção no servidor de casa ("O servidor de produção é a mesma máquina onde você roda", diagrama da arquitetura, limites para 16 GB). Ele continua valendo até ser atualizado; a atualização fica para quando Daniel decidir.
+- Nada do código do PR 3 muda por causa desta decisão.

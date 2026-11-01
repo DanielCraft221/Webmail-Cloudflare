@@ -2,6 +2,18 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
+## Roteiro (atualizado em 2026-11-01)
+
+Produção do webmail numa VPS própria (`survivus-vps01`, OVHcloud BHS); o servidor de casa vira o de desenvolvimento (`docs/decisoes.md`). O `CLAUDE.md` ainda não foi atualizado.
+
+| Ordem | Etapa | Onde |
+|---|---|---|
+| 1 | Etapa 5: login, 2FA, sessões, limites, CLI (em andamento) | casa |
+| 2 | Etapa 6: caixas, lista e leitura de mensagens | casa |
+| 3 | **Etapa 0-VPS**: Daniel prepara a VPS sozinho (Docker, Tailscale com `tag:vps`, nenhuma porta aberta). Claude Code não participa nem acessa a VPS | VPS |
+| 4 | Etapa 7: primeiro deploy, só leitura. Imagem montada pela CI e publicada no GHCR; Daniel faz o pull na VPS por digest. cloudflared com `--protocol http2`, limites para 4 GB, cookie `__Host-` testado no Chrome com HTTPS real | CI + VPS |
+| 5 | Etapas 8 a 12, cada uma com um deploy pequeno | casa + VPS |
+
 ## Etapa atual: 5 (em andamento: PR 3, webmail e CLI)
 
 ### Próximo passo
