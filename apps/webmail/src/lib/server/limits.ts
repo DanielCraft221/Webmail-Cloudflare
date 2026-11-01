@@ -4,7 +4,7 @@ import type { DatabaseSync } from "node:sqlite";
 const MINUTE = 60_000;
 export const FAILURE_WINDOW = 15 * MINUTE;
 export const IP_FAILURES = 10;
-/** Per username and IP block: one IP alone can only lock the username for itself. */
+/** Per username and IP block (IPv4, or IPv6 /48): one origin alone can only lock the username for itself. */
 export const USER_IP_FAILURES = 5;
 /** Per username from every IP together: needs many IPs, each one also heading for a ban. */
 export const USER_FAILURES = 50;
@@ -32,7 +32,7 @@ export function banUntil(
   return row ? Number(row.until) : null;
 }
 
-/** Lock key for one username and one IP block (ipKey): "<userKey>:<ipKey>". */
+/** Lock key for one username and one IP block (lockBlockKey: IPv4, or IPv6 /48): "<userKey>:<block>". */
 function pairKey(username: string, ipKey: string): string {
   return `${userKey(username)}:${ipKey}`;
 }

@@ -11,8 +11,21 @@ export function parseIp(value: string | null | undefined): string | null {
 
 /** Key for rate limits and bans: the IPv4 address, or the /64 block of an IPv6 address. */
 export function ipKey(ip: string): string {
+  return block(ip, 4);
+}
+
+/**
+ * Key for username locks: the IPv4 address, or the /48 of an IPv6 address. A free tunnel
+ * broker (Hurricane Electric) hands out a whole /48: counted by /64, one person could reach
+ * the global lock alone.
+ */
+export function lockBlockKey(ip: string): string {
+  return block(ip, 3);
+}
+
+function block(ip: string, groups: 3 | 4): string {
   if (isIP(ip) === 4) return ip;
-  return `${expandIpv6(ip).slice(0, 4).join(":")}::/64`;
+  return `${expandIpv6(ip).slice(0, groups).join(":")}::/${groups * 16}`;
 }
 
 function expandIpv6(ip: string): string[] {

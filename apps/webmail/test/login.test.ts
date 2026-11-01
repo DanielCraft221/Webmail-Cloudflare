@@ -268,6 +268,26 @@ describe("attemptLogin", () => {
     ).toBeNull();
   });
 
+  it("13 IPv6 /64 blocks of one /48 cannot reach the global lock", async () => {
+    const t = setup();
+    (t.api.authLookup as ReturnType<typeof vi.fn>).mockResolvedValue(
+      t.user(ANA),
+    );
+    const wrong = { username: "ana", password: "wrong", code: "000000" };
+    // 4 failures from each /64 stay under the /64 IP ban; 52 in total.
+    for (let n = 0; n < 13; n++)
+      for (let i = 0; i < 4; i++)
+        await attemptLogin(t.deps, `2001:db8:77:${n}::${i + 1}`, wrong);
+    const scopes = t.audits
+      .filter((a) => a.action === "username_lock")
+      .map((a) => a.detail?.scope);
+    expect(scopes).toEqual(["ip"]);
+    const right = { username: "ana", password: "right password", code: code() };
+    expect(await attemptLogin(t.deps, "2001:db8:78::1", right)).toMatchObject({
+      ok: true,
+    });
+  });
+
   it("locks a username for every IP after 50 failures from many IPs", async () => {
     const t = setup();
     (t.api.authLookup as ReturnType<typeof vi.fn>).mockResolvedValue(

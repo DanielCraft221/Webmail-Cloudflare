@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { api as schema } from "@webmail/shared";
 import { audit, recordIpFailure } from "./audit.ts";
-import { ipKey } from "./ip.ts";
+import { ipKey, lockBlockKey } from "./ip.ts";
 import {
   banUntil,
   clearUserFailures,
@@ -63,13 +63,18 @@ export async function attemptLogin(
   const username = input.username.trim().toLowerCase();
   const code = input.code.replace(/\s/g, "");
   const validName = schema.username.safeParse(username).success;
-  const locked = validName && lockUntil(deps.db, username, ipk, now) !== null;
+  // Bans count IPv6 by /64; username locks by /48 (ip.ts).
+  const lockBlock = lockBlockKey(ip);
+  const locked =
+    validName && lockUntil(deps.db, username, lockBlock, now) !== null;
 
   const fail = (reason: string, user: { id: string } | null): LoginResult => {
     recordIpFailure(deps.db, deps.api, ip, now);
     // While a lock is active, failures are not counted: they would only extend it.
     const lock =
-      validName && !locked ? userFailure(deps.db, username, ipk, now) : null;
+      validName && !locked
+        ? userFailure(deps.db, username, lockBlock, now)
+        : null;
     // The typed username is sent only when it exists: it might be a password typed in the wrong field.
     audit(deps.api, {
       action: "login_failure",
@@ -122,7 +127,7 @@ export async function attemptLogin(
   )
     return fail("code_reused", user);
 
-  clearUserFailures(deps.db, username, ipk);
+  clearUserFailures(deps.db, username, lockBlock);
   const me = { id: user.id, username, displayName: null, role: user.role };
   const token = createSession(deps.db, me, ip, now);
   audit(deps.api, {

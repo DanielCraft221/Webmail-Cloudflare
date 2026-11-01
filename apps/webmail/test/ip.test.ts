@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ipKey, parseIp } from "../src/lib/server/ip.ts";
+import { ipKey, lockBlockKey, parseIp } from "../src/lib/server/ip.ts";
 
 describe("parseIp", () => {
   it("accepts IPv4 and IPv6, maps ::ffff:a.b.c.d to IPv4", () => {
@@ -32,5 +32,15 @@ describe("ipKey", () => {
     expect(ipKey("2001:db8:1:3::1")).not.toBe(ipKey("2001:db8:1:2::1"));
     expect(ipKey("::1")).toBe("0000:0000:0000:0000::/64");
     expect(ipKey("64:ff9b::203.0.113.7")).toBe("0064:ff9b:0000:0000::/64");
+  });
+});
+
+describe("lockBlockKey", () => {
+  it("is the IPv4 address, or the /48 of an IPv6 address (bans stay by /64)", () => {
+    expect(lockBlockKey("203.0.113.7")).toBe("203.0.113.7");
+    expect(lockBlockKey("2001:db8:5:6::1")).toBe("2001:0db8:0005::/48");
+    expect(lockBlockKey("2001:db8:5:ffff:1::")).toBe("2001:0db8:0005::/48");
+    expect(lockBlockKey("2001:db8:6::1")).toBe("2001:0db8:0006::/48");
+    expect(ipKey("2001:db8:5:6::1")).toBe("2001:0db8:0005:0006::/64");
   });
 });

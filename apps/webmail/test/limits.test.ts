@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { openDb } from "../src/lib/server/db.ts";
-import { ipKey } from "../src/lib/server/ip.ts";
+import { ipKey, lockBlockKey } from "../src/lib/server/ip.ts";
 import {
   BAN_STEPS,
   banUntil,
@@ -77,12 +77,14 @@ describe("username locks", () => {
     expect(lockUntil(db, "bia", A, 5)).toBeNull();
   });
 
-  it("counts the IPv6 /64 as one block", () => {
+  it("counts the IPv6 /48 as one block", () => {
     const db = openDb(":memory:");
     for (let i = 0; i < 5; i++)
-      userFailure(db, "ana", ipKey(`2001:db8:1:2::${i + 1}`), i);
-    expect(lockUntil(db, "ana", ipKey("2001:db8:1:2::ffff"), 5)).not.toBeNull();
-    expect(lockUntil(db, "ana", ipKey("2001:db8:1:3::1"), 5)).toBeNull();
+      userFailure(db, "ana", lockBlockKey(`2001:db8:1:${i}::1`), i);
+    expect(
+      lockUntil(db, "ana", lockBlockKey("2001:db8:1:ffff::9"), 5),
+    ).not.toBeNull();
+    expect(lockUntil(db, "ana", lockBlockKey("2001:db8:2::1"), 5)).toBeNull();
   });
 
   it("locks the username for every IP after 50 failures from many IPs", () => {
