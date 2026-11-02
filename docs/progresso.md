@@ -14,19 +14,27 @@ Produção do webmail numa VPS própria (`survivus-vps01`, OVHcloud BHS); o serv
 | 4 | Etapa 7: primeiro deploy, só leitura. Imagem montada pela CI e publicada no GHCR; Daniel faz o pull na VPS por digest. cloudflared com `--protocol http2`, limites para 4 GB, cookie `__Host-` testado no Chrome com HTTPS real | CI + VPS |
 | 5 | Etapas 8 a 12, cada uma com um deploy pequeno | casa + VPS |
 
-## Etapa atual: 5 (em andamento: PR 3, webmail e CLI)
+## Etapa atual: 5 (em andamento: falta o PR do kit 3.1.1 e a validação)
 
 ### Próximo passo
 
-**PR 3 (#24, rascunho) pronto, aguardando só o `@sveltejs/kit` 3.1.1 e o `@sveltejs/adapter-node` 6.0.1.** CI verde nos três jobs (`secrets`, `quality`, `browser`) no `63afd2a`. Não começar a Etapa 6 antes do merge.
+**PR 3 (#24) mergeado em 2026-11-02 (`3343ad6`) ainda no `@sveltejs/kit` 3.1.0 e no `@sveltejs/adapter-node` 6.0.0.** Decisão de Daniel, fora da condição combinada (esperar o 3.1.1 e o 6.0.1, que corrigem seis avisos de segurança; `docs/webmail-auth.md`).
 
-1. **Em 2026-11-06** (a regra de 7 dias do pnpm libera o kit em 2026-11-05 e o adapter em 2026-11-06): no branch `etapa-5/webmail`, trocar para `@sveltejs/kit` 3.1.1 e `@sveltejs/adapter-node` 6.0.1 (e o `svelte` 5.57.3) em `apps/webmail/package.json`, `pnpm install`, `pnpm lint && pnpm typecheck && pnpm test`, commit, push, conferir os três jobs da CI pela API e reler o `docs/webmail-auth.md` (avisos de segurança e lista de padrões proibidos).
-2. Daniel lê linha por linha os arquivos sensíveis (`.github/workflows/ci.yml`, `.gitignore`, `CLAUDE.md`), atualiza a descrição do PR e faz o merge.
-3. Depois do merge, **nesta ordem** (o PR 3 muda o Worker: 401 para usuário sem senha ou 2FA e `updatedAt` no `GET /v1/me`; sem migração):
-   1. Deploy do Worker da `main` limpa (mostrar o comando e esperar o "ok"; anotar a versão anterior para o rollback). Tem de vir antes da tarefa 8: o webmail novo exige o `updatedAt` no `/v1/me`.
-   2. `scripts/smoke-api.sh` logo depois: **as checagens com o `SMOKE_USER_ID` (grupo usuário) vão dar 401**, porque o `danielcraft221` ainda não tem senha. Esperado. Access, tokens e rotas de serviço têm de passar; qualquer outra falha → rollback.
-   3. Tarefa 8 (conta real), com o "ok" de Daniel antes do `user:reset danielcraft221` (mexe no D1 de produção).
-   4. `scripts/smoke-api.sh` de novo: tudo PASS.
+Regras até a atualização:
+- **PR obrigatório em 2026-11-06:** `@sveltejs/kit` 3.1.1, `@sveltejs/adapter-node` 6.0.1 (e `svelte` 5.57.3) em `apps/webmail/package.json`, `pnpm install`, `pnpm lint && pnpm typecheck && pnpm test`, CI verde nos três jobs, reler o `docs/webmail-auth.md` (avisos e padrões proibidos).
+- Esse PR vem **antes de qualquer deploy do webmail (Etapa 7)** e **antes do merge de qualquer PR da Etapa 6**.
+- Enquanto isso, o webmail roda só em `127.0.0.1` (`pnpm dev` pelo túnel SSH). Nunca `--host`, nunca exposto.
+
+Depois do merge, **nesta ordem** (o PR 3 muda o Worker: 401 para usuário sem senha ou 2FA e `updatedAt` no `GET /v1/me`; sem migração):
+1. ✅ Deploy do Worker da `main` limpa (`3343ad6`), em 2026-11-02, na forma protegida (`main` limpa, `--frozen-lockfile`, versão no ar conferida). Versão anterior: `4ff110af-0455-4efa-b587-389197cb89ae`. Versão nova: `29526180-d7e8-4563-b36e-113ecd0f10c7`. Rollback: `pnpm exec wrangler rollback 4ff110af-0455-4efa-b587-389197cb89ae`.
+2. ✅ `scripts/smoke-api.sh`: Access e Worker `401` sem credenciais, como esperado; `GET /v1/mailboxes` com o `SMOKE_USER_ID` deu `401`, também esperado (o `danielcraft221` ainda não tem senha). O script para no primeiro FAIL, então as seções 7 e 8 rodaram numa cópia temporária sem as checagens do usuário: separação dos tokens e `workers.dev` desligado, 11 PASS.
+3. ✅ Tarefa 8 (conta real), 2026-11-02. Daniel rodou o `user:reset danielcraft221` no próprio terminal (o link não passou pelo chat), configurou senha e 2FA pelo link no `pnpm dev` (`127.0.0.1:5173`, túnel do Termius) e testou: login certo, código errado (`bad_code`), código repetido (`code_reused`), usuário inexistente (`unknown_user`, sem gravar o nome digitado) e logout. O `audit:list` mostra tudo, sem segredos.
+4. ✅ `scripts/smoke-api.sh` completo: 20 PASS, nenhum FAIL.
+5. ✅ Recebimento depois do deploy: e-mail de teste da conta do IFMS para `contato@survivus.com.br`, recebido às 2026-11-02T12:04:54Z (`inbox:list`: `parse_status` `ok`, `spf`, `dkim` e `dmarc` `pass`).
+
+Falta para fechar a Etapa 5:
+1. **Em 2026-11-06:** o PR obrigatório do kit 3.1.1 / adapter 6.0.1 (acima).
+2. "Ao terminar" da `docs/etapas/etapa-5.md`: mostrar como Daniel testa cada critério de pronto (incluindo `ss -tlnp` com o `pnpm dev` no ar e o `webmail.env` sem `ADMIN_API_TOKEN`), listar as dependências com licença, dizer o que ficou pendente. Esperar a validação de Daniel. Não começar a Etapa 6 antes.
 
 ## Etapa 5: em andamento
 
@@ -57,7 +65,7 @@ Produção do webmail numa VPS própria (`survivus-vps01`, OVHcloud BHS); o serv
 ### Falta
 
 - PR 2: implantação do Worker (tarefa 7): feito e mergeado.
-- PR 3 (#24, rascunho, CI verde): falta só atualizar o kit e o adapter em 2026-11-06 (condição do merge), a revisão de Daniel e o merge. Depois: deploy do Worker, smoke test e tarefa 8 (Próximo passo, acima).
+- PR 3 (#24): mergeado em 2026-11-02 no kit 3.1.0 / adapter 6.0.0. Falta o PR obrigatório do kit 3.1.1 / adapter 6.0.1 em 2026-11-06, o deploy do Worker, o smoke test e a tarefa 8 (Próximo passo, acima).
 - Atualizar o `CLAUDE.md` para a produção na VPS (quando Daniel decidir).
 - Tarefa 8 (conta real): o usuário do seed é **`danielcraft221`**, não `daniel`. O comando é `WEBMAIL_ORIGIN=http://localhost:5173 pnpm admin user:reset danielcraft221` (link para o `pnpm dev` pelo túnel; `docs/admin-cli.md`).
 
