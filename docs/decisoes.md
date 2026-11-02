@@ -355,8 +355,8 @@ Efeito colateral aceito: qualquer `PATCH` (papel, nome, reativação) derruba as
 - Limites de memória e CPU no compose dimensionados para 4 GB (a VPS não divide RAM com o Minecraft, mas é menor).
 - Testar o cookie `__Host-` no Chrome com o HTTPS real.
 
-**Pendências desta decisão (não feitas agora, por escolha de Daniel):**
-- O `CLAUDE.md` ainda descreve a produção no servidor de casa ("O servidor de produção é a mesma máquina onde você roda", diagrama da arquitetura, limites para 16 GB). Ele continua valendo até ser atualizado; a atualização fica para quando Daniel decidir.
+**Pendências desta decisão:**
+- ✅ O `CLAUDE.md` foi atualizado em 2026-11-02 (PR `docs/vps`): arquitetura, invariantes, tabela de segredos e roteiro com a Etapa 0-VPS.
 - Nada do código do PR 3 muda por causa desta decisão.
 
 ## `Referrer-Policy: same-origin`, não `no-referrer` (2026-11-01)
