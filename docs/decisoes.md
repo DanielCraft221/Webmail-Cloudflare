@@ -370,3 +370,31 @@ Efeito colateral aceito: qualquer `PATCH` (papel, nome, reativação) derruba as
 **Para a Etapa 6:** o `<iframe>` do e-mail usa `referrerpolicy="no-referrer"`, e os links do e-mail usam `rel="noopener noreferrer"`. Assim o remetente nunca recebe o endereço do webmail, mesmo com a política `same-origin` na página.
 
 **Para a Etapa 7:** a imagem Docker é construída com `ORIGIN=https://webmail.survivus.com.br` (a origem fica gravada no build e é a origem do CSRF). A CI confere isso antes de publicar no GHCR: sobe a imagem e verifica que um POST com essa origem passa da checagem e que qualquer outra origem recebe `403`. Nenhuma origem de teste vai para essa imagem: os builds de teste (`localhost:4173`) existem só dentro dos jobs de teste.
+
+## Leitura segura de mensagens (Etapa 6, PR 1)
+
+**Três camadas, independentes** (`docs/webmail-leitura.md`). Uma falha numa camada não basta para um ataque:
+1. **DOMPurify no servidor**, com lista do que é permitido (tags e atributos), `WHOLE_DOCUMENT` para manter o `<style>` do `<head>`, links só `http`, `https` e `mailto` (com `target="_blank"` e `rel="noopener noreferrer"`), imagens remotas removidas e contadas. A limpeza de CSS por expressão regular é só uma camada extra.
+2. **Rota própria para o corpo** (`/mensagens/[id]/corpo`), a única que pode ir num iframe, com uma CSP só dela: `default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`, mais `X-Frame-Options: SAMEORIGIN` e `Referrer-Policy: no-referrer`. Todo o resto continua com `frame-ancestors 'none'` e `DENY`. Não usamos `srcdoc`: ele herda a CSP e a origem da página (proibido por teste).
+3. **`<iframe sandbox="allow-popups allow-popups-to-escape-sandbox">`** com `referrerpolicy="no-referrer"`.
+
+**Prova:** o teste no Firefox abre um e-mail malicioso (scripts, `alert`, formulários, CSS remoto com `url()` disfarçado por comentário e escape, fontes, imagens) e falha se o navegador tentar qualquer endereço fora de `localhost`. Mutações: desligar o DOMPurify, a CSP da rota (ou só o `sandbox` dela) ou o `sandbox` do iframe derruba testes.
+
+**Sanitização em `worker_threads`** (biblioteca padrão do Node). Ela é síncrona e travaria o servidor inteiro, logins incluídos (1 MB leva 1,6 s neste servidor):
+- **2 workers no máximo**; o terceiro pedido ao mesmo tempo recebe `503`.
+- **HTML acima de 1 MB não é sanitizado** (decisão de Daniel): a página mostra a versão em texto e o botão do `.eml`.
+- Cada worker é criado com **`env: {}`**: ele processa HTML de estranhos e não enxerga o `INTERNAL_API_TOKEN`, a `TOTP_ENCRYPTION_KEY` nem nenhuma outra variável (teste confere).
+- Teto de memória (`resourceLimits`, 512 MB de heap) e tempo máximo (10 s). Um worker que estoura é **encerrado (`terminate`) e nunca reaproveitado**; o próximo pedido cria um novo (teste com um worker que trava e outro que estoura a memória).
+- **Limite do que o `env: {}` protege:** um worker é uma thread do mesmo processo. Ele esconde as variáveis do `process.env` do worker, mas uma falha no jsdom ou no DOMPurify que levasse a execução de código rodaria no mesmo processo, que ainda tem o ambiente inicial (`/proc/self/environ`). Isolamento completo exigiria um processo separado, com outro usuário do sistema. Fica registrado como risco; o jsdom não executa scripts nem carrega nada, e as duas bibliotecas ficam sempre na versão mais nova.
+
+**Para a Etapa 7:** o container do webmail precisa de **cerca de 1,25 GB** de limite de memória: o Node, 2 sanitizações de ~350 MiB e 2 argon2 de 64 MiB. Medir de novo no container, já no processador da VPS.
+
+**Identidade do remetente:** nenhum selo de "verificado" (o `Authentication-Results` pode ter sido forjado por quem enviou). O remetente aparece sempre com o nome e o endereço real lado a lado.
+
+**Nada que mude estado num GET.** O SvelteKit pré-carrega links quando o mouse passa por cima: abrir a mensagem (página e corpo) não marca como lida (teste). Marcar como lida será uma *form action* (POST), no PR 2. **Busca por POST**, nunca `?q=` na URL (PR 2).
+
+**Quem decide o acesso é o Worker.** O webmail nunca usa o id da URL para decidir permissão. Mensagem de outra caixa, inexistente ou com id malformado recebem a mesma resposta: `404 Mensagem não encontrada` (teste compara as três).
+
+**Downloads:** o webmail monta uma resposta nova, com os cabeçalhos dele (`application/octet-stream`, `Content-Disposition` com o nome limpo, `nosniff`, `private, no-store`), e repassa só o corpo, em stream. O tipo declarado pelo remetente nunca vira `Content-Type`. A limpeza do nome é a mesma do Worker, agora em `packages/shared` (`contentDisposition`). **Atalho:** o Worker continua com a cópia dele, porque a Etapa 6 não muda o Worker; ela passa a usar a do `shared` na próxima mudança do Worker.
+
+**Licenças aceitas por Daniel (2026-11-02):** `BlueOak-1.0.0` (`lru-cache`) e `CC0-1.0` (`mdn-data`), que vêm com o jsdom. As duas foram acrescentadas à lista da regra 8 do `CLAUDE.md`. O DOMPurify é usado sob a Apache-2.0 (licença dupla `MPL-2.0 OR Apache-2.0`).

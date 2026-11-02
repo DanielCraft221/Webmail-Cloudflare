@@ -14,7 +14,7 @@ Produção do webmail numa VPS própria (`survivus-vps01`, OVHcloud BHS); o serv
 | 4 | Etapa 7: primeiro deploy, só leitura. Imagem montada pela CI e publicada no GHCR; Daniel faz o pull na VPS por digest. cloudflared com `--protocol http2`, limites para 4 GB, cookie `__Host-` testado no Chrome com HTTPS real | CI + VPS |
 | 5 | Etapas 8 a 12, cada uma com um deploy pequeno | casa + VPS |
 
-## Etapa atual: 5 (em andamento: falta o PR do kit 3.1.1 e a validação)
+## Etapa atual: 5 (falta o PR do kit 3.1.1 e a validação) e 6 (PR 1 em andamento)
 
 ### Próximo passo
 
@@ -34,7 +34,22 @@ Depois do merge, **nesta ordem** (o PR 3 muda o Worker: 401 para usuário sem se
 
 Falta para fechar a Etapa 5:
 1. **Em 2026-11-06:** o PR obrigatório do kit 3.1.1 / adapter 6.0.1 (acima).
-2. "Ao terminar" da `docs/etapas/etapa-5.md`: mostrar como Daniel testa cada critério de pronto (incluindo `ss -tlnp` com o `pnpm dev` no ar e o `webmail.env` sem `ADMIN_API_TOKEN`), listar as dependências com licença, dizer o que ficou pendente. Esperar a validação de Daniel. Não começar a Etapa 6 antes.
+2. "Ao terminar" da `docs/etapas/etapa-5.md`: mostrar como Daniel testa cada critério de pronto (incluindo `ss -tlnp` com o `pnpm dev` no ar e o `webmail.env` sem `ADMIN_API_TOKEN`), listar as dependências com licença, dizer o que ficou pendente. Esperar a validação de Daniel. A Etapa 6 começou em 2026-11-02, por decisão de Daniel; nenhum PR dela é mergeado antes do PR do kit.
+
+### Etapa 6, PR 1 (`etapa-6/leitura-segura`), 2026-11-02
+
+Feito:
+- Pesquisa da tarefa 1 em `docs/webmail-leitura.md` (DOMPurify 3.4.17 com jsdom 30.1.3, avisos, custo medido, `srcdoc`, CSP `sandbox`, atributos do iframe, licenças).
+- Decisões de Daniel: limite de 1 MB de HTML; licenças BlueOak-1.0.0 e CC0-1.0 aceitas (regra 8 do `CLAUDE.md`); página mínima de leitura no PR 1; worker com `env: {}`; worker que estoura é encerrado e nunca reaproveitado; o teste "nenhuma requisição sai de localhost" prova o bloqueio do CSS.
+- Código: sanitização em 2 `worker_threads` (503 no terceiro), rota do corpo com CSP própria, `X-Frame-Options: SAMEORIGIN` só nela, página mínima com o iframe, downloads com cabeçalhos do webmail, `contentDisposition` no `packages/shared`.
+- Testes: corpus de ataques e mXSS, workers (ambiente vazio, travado, memória, 503, 1 MB), 13 testes HTTP novos (39 no total), 3 no Firefox (só na CI). Mutações das três camadas e dos workers: todas derrubam algum teste.
+- `security-audit`: a limpeza de CSS era quadrática (2 s em 40 KB); agora é linear, com teste. Documentado em `docs/webmail-leitura.md`.
+
+Próximo passo exato:
+1. Conferir os três jobs da CI pela API (o job `browser` roda os 3 testes novos do Firefox pela primeira vez).
+2. **Revisão independente por sessão nova**, só leitura, sobre o diff do PR 1 (como na Etapa 5). Corrigir os achados com teste e mutação.
+3. Daniel abre o PR como rascunho; ele só é mergeado depois do PR do kit 3.1.1 / adapter 6.0.1 (2026-11-06).
+4. Depois: PR 2 (`etapa-6/interface`).
 
 ## Etapa 5: em andamento
 
@@ -239,6 +254,13 @@ Etapa 2. O `docs/etapas/etapa-2.md` já está na pasta, mas ainda não foi commi
 
 Ideias que ainda não entraram no roteiro.
 
+- (Etapa 6) Carregar imagens remotas, de preferência por um proxy, para não revelar o IP de quem lê.
+- (Etapa 6) Imagens `cid:` só de tipos raster conferidos pelo conteúdo do arquivo (nunca SVG).
+- (Etapa 6) Selo de remetente verificado, com um `Authentication-Results` confiável.
+- (Etapa 6) Mostrar o destino real de um link antes de abrir.
+- (Etapa 6) Visão por conversa.
+- (Etapa 6) Isolar a sanitização num processo separado, com outro usuário do sistema (hoje é uma thread do mesmo processo; `docs/decisoes.md`).
+- (Etapa 6) O Worker passar a usar o `contentDisposition` do `packages/shared` na próxima mudança dele.
 - `scripts/smoke-api.sh` recusar um `MAIL_API_URL` diferente de `https://mail-api.survivus.com.br`, para nunca mandar os tokens a outro host.
 - Tail Worker que receba os eventos do `mail-core` e guarde só os campos do nosso `log()`, sem `mailFrom`, `rcptTo` nem URL (os Workers Logs ficam desligados, `docs/decisoes.md`). Precisa de um lugar para guardar (D1 ou R2) e de uma retenção definida.
 - Ferramenta de reprocessamento da DLQ: reenviar para a fila os `.eml` do R2 que não têm linha no D1 (DLQ expirada após 14 dias), usando o `customMetadata` do objeto. Tratar como duplicata, pela `dedupeKey`, a cópia que fica em `raw/` quando a fila falha no handler.

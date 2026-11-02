@@ -1,6 +1,6 @@
 # Webmail: leitura segura de mensagens (Etapa 6)
 
-Pesquisa da tarefa 1, feita em 2026-11-02. A configuração final e as três camadas entram aqui no PR 1.
+Pesquisa da tarefa 1 (2026-11-02) e o que o PR 1 implementou. Decisões em `docs/decisoes.md`, "Leitura segura de mensagens".
 
 ## DOMPurify no Node
 
@@ -75,7 +75,7 @@ Duas sanitizações ao mesmo tempo, cada uma num `worker_thread` (pico do proces
 
 Conclusões:
 - **A sanitização é síncrona.** Na thread principal, 1 MB travaria o servidor inteiro, inclusive o login de todo mundo, por 1,6 s. Ela tem de rodar em **`worker_threads`** (biblioteca padrão do Node). São dois workers fixos, cada um com o seu jsdom; o terceiro pedido recebe 503.
-- **Limite proposto: 1 MB de HTML**, não 2 MB. Com 1 MB, duas sanitizações juntas ficam abaixo de 700 MiB e cerca de 3 s. Com 2 MB, passam de 800 MiB num container que divide 4 GB com o cloudflared. Uma newsletter típica tem bem menos de 200 KB.
+- **Limite: 1 MB de HTML** (decisão de Daniel), não 2 MB. Com 1 MB, duas sanitizações juntas ficam abaixo de 700 MiB e cerca de 3 s. Com 2 MB, passam de 800 MiB num container que divide 4 GB com o cloudflared. Uma newsletter típica tem bem menos de 200 KB.
 - **Cada worker com `resourceLimits`** (teto de memória do heap) e um tempo máximo. Se passar, o worker é encerrado e recriado, e a página mostra o texto e o botão do `.eml`, como no HTML grande.
 - O VPS tem outro processador. **Medir de novo na Etapa 7**, já no container.
 
@@ -139,3 +139,25 @@ As duas, com as dependências, somam 38 pacotes:
 | `MPL-2.0 OR Apache-2.0` | `dompurify` (usamos a Apache-2.0) |
 
 **Exceção para Daniel decidir:** o `lru-cache` usa a [Blue Oak Model License 1.0.0](https://blueoakcouncil.org/license/1.0.0). É uma licença permissiva, aprovada pela OSI, sem cláusula que conflite com a AGPL, mas não está na lista do `CLAUDE.md`. O CC0-1.0 é domínio público, compatível. Os dois são novos no projeto.
+
+## O que o PR 1 implementou
+
+| Peça | Arquivo |
+|---|---|
+| Sanitização (camada 1) | `apps/webmail/src/lib/server/sanitize.ts` |
+| Workers, limite de 1 MB, 503 | `apps/webmail/src/lib/server/sanitize-pool.ts` |
+| Documento do corpo (texto, avisos, recurso ao texto) | `apps/webmail/src/lib/server/message-body.ts` |
+| CSP e cabeçalhos da rota do corpo (camada 2) | `apps/webmail/src/hooks.server.ts` (`BODY_ROUTE`) |
+| Iframe com `sandbox` (camada 3) e página mínima | `apps/webmail/src/routes/mensagens/[id]/+page.svelte` |
+| Downloads | `apps/webmail/src/lib/server/read.ts` e as rotas `anexos/[attId]` e `eml` |
+| Nome do arquivo baixado | `packages/shared/src/content-disposition.ts` |
+
+Achados durante a implementação:
+- **`ALLOWED_URI_REGEXP` também vale para atributos que não são endereço.** Com `/^(?:https?:|mailto:)/i`, o DOMPurify tirava `width="600"` e `align` das tabelas. A expressão usada é a padrão do DOMPurify, só com `http`, `https` e `mailto` no lugar da lista de esquemas; um hook remove depois os `href` relativos ou sem esquema (`/logout`, `//site`, `#x`), que apontariam para o próprio webmail.
+- **Um `src` relativo (`<img src="x">`) também é removido e contado**: ele carregaria algo do próprio webmail.
+- **O aviso de imagens bloqueadas** vai dentro do documento do corpo, logo depois do `<body>` verdadeiro, com estilo inline `!important` (o CSS do e-mail não o esconde). Para achar o `<body>` com segurança, a limpeza de CSS remove todo `<`.
+- **O build do Vite não copia arquivos citados com `new URL(..., import.meta.url)` no servidor.** O conjunto de workers carrega o `sanitize.ts` com `import()` dinâmico: o build dá a ele um arquivo próprio (`build/server/chunks/sanitize.js`), e o worker roda esse mesmo arquivo, pelo `import.meta.url`. Os testes HTTP rodam contra o build, então uma quebra aqui aparece neles.
+- **O `/proc/self/task` mostra que o worker travado para de verdade**: o teste conta as threads do processo antes e depois do `terminate`.
+
+- **`security-audit` (2026-11-02): a limpeza de CSS era quadrática.** Uma expressão com `[^;{}]*` antes das alternativas levava 2,1 s em 40 KB de CSS sem `;`, `{` ou `}`; com 1 MB, prenderia o worker até o tempo máximo (10 s), e a mensagem cairia no texto. Agora o CSS é dividido em `;`, `{` e `}`, e cada pedaço que carrega algo sai (tempo linear). Um teste com 1 MB exige menos de 1 s; com a expressão antiga de volta, o teste não termina.
+- **Downloads com `Content-Encoding`:** o `fetch` descomprime o corpo, então o `Content-Length` do Worker só é repassado quando a resposta não vem comprimida.
