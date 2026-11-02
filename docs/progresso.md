@@ -26,8 +26,8 @@ Regras até a atualização:
 - Enquanto isso, o webmail roda só em `127.0.0.1` (`pnpm dev` pelo túnel SSH). Nunca `--host`, nunca exposto.
 
 Depois do merge, **nesta ordem** (o PR 3 muda o Worker: 401 para usuário sem senha ou 2FA e `updatedAt` no `GET /v1/me`; sem migração):
-1. Deploy do Worker da `main` limpa (mostrar o comando e esperar o "ok"; anotar a versão anterior para o rollback). Tem de vir antes da tarefa 8: o webmail novo exige o `updatedAt` no `/v1/me`.
-2. `scripts/smoke-api.sh` logo depois: **as checagens com o `SMOKE_USER_ID` (grupo usuário) vão dar 401**, porque o `danielcraft221` ainda não tem senha. Esperado. Access, tokens e rotas de serviço têm de passar; qualquer outra falha → rollback.
+1. ✅ Deploy do Worker da `main` limpa (`3343ad6`), em 2026-11-02, na forma protegida (`main` limpa, `--frozen-lockfile`, versão no ar conferida). Versão anterior: `4ff110af-0455-4efa-b587-389197cb89ae`. Versão nova: `29526180-d7e8-4563-b36e-113ecd0f10c7`. Rollback: `pnpm exec wrangler rollback 4ff110af-0455-4efa-b587-389197cb89ae`.
+2. ✅ `scripts/smoke-api.sh`: Access e Worker `401` sem credenciais, como esperado; `GET /v1/mailboxes` com o `SMOKE_USER_ID` deu `401`, também esperado (o `danielcraft221` ainda não tem senha). O script para no primeiro FAIL, então as seções 7 e 8 rodaram numa cópia temporária sem as checagens do usuário: separação dos tokens e `workers.dev` desligado, 11 PASS.
 3. Tarefa 8 (conta real), com o "ok" de Daniel antes do `user:reset danielcraft221` (mexe no D1 de produção).
 4. `scripts/smoke-api.sh` de novo: tudo PASS.
 
