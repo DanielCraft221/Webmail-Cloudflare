@@ -76,6 +76,7 @@ Confira na documentação atual e registre em `docs/webmail-leitura.md`, com lin
 - **Caixas:** lista com contagem de não lidas por pasta (`inbox`, `archive`, `spam`, `trash`, `sent`).
 - **Lista de mensagens:** remetente (nome e endereço), assunto, data, marca de não lida e de anexo. Paginação por cursor, 50 por página.
 - **Leitura:** cabeçalhos (de, para, data, assunto), o iframe do corpo, a lista de anexos com tamanho, o botão do `.eml`, o aviso de imagens bloqueadas e um botão para alternar entre HTML e texto.
+- **Avisos fora do iframe** (decisão de Daniel, 2026-11-02): o aviso de imagens bloqueadas sai do corpo (`withNotice`) e vai para a página, junto com os avisos de mensagem grande demais, de falha na formatação e de corpo ilegível. O CSS do e-mail pode esconder ou falsificar o que estiver dentro do iframe. Regra: tudo o que o webmail diz ao usuário fica fora do iframe; dentro dele, só o conteúdo do remetente. Teste: nenhum texto do webmail no documento da rota do corpo.
 - **Ações (form actions):** marcar como lida ou não lida, e mover para arquivo, spam ou lixeira.
 - **Busca:** formulário POST, só nas caixas permitidas.
 - **Celular:** a lista e a leitura funcionam numa tela de 360 px.

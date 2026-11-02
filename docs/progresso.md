@@ -44,14 +44,22 @@ Feito:
 - Código: sanitização em 2 `worker_threads` (503 no terceiro), rota do corpo com CSP própria, `X-Frame-Options: SAMEORIGIN` só nela, página mínima com o iframe, downloads com cabeçalhos do webmail, `contentDisposition` no `packages/shared`.
 - Testes: corpus de ataques e mXSS, workers (ambiente vazio, travado, memória, 503, 1 MB), 14 testes HTTP novos (40 no total), 3 no Firefox (só na CI). Contra o build: o 503 e um worker travado de verdade (200 mil `<div>` aninhados), encerrado no tempo máximo de 10 s enquanto o servidor continua respondendo. Mutações das três camadas e dos workers: todas derrubam algum teste.
 - `security-audit`: a limpeza de CSS era quadrática (2 s em 40 KB); agora é linear, com teste. Documentado em `docs/webmail-leitura.md`.
+- A primeira "revisão independente" foi feita na sessão errada e não vale. Correções pedidas por Daniel (2026-11-02), cada uma com teste:
+  - A1: RSS real medido com as entradas que estouram, dois workers juntos: pico de ~1,4 GiB (~1,6 GiB com servidor e argon2). Proposta para a Etapa 7: **2 GiB** no container (`docs/webmail-leitura.md`, "Memória real"). Teste de memória no `sanitize-pool.test.ts`.
+  - A2: `X-DNS-Prefetch-Control: off` em todas as respostas.
+  - A3: mensagem que estoura tempo ou memória fica 6 horas no SQLite (`sanitize_failed`, só o id) e vai direto para o texto.
+  - A4: log `sanitizer_unavailable` sem dados; a promise rejeitada não fica guardada.
+  - O1: `data:` só para `png`, `jpeg`, `gif` e `webp`.
+  - O4: MIT-0 aceita (regra 8 do `CLAUDE.md`). O2 e O3 registrados em `docs/decisoes.md`.
+- O PR #27 (rascunho) não aparecia na API pública do GitHub em 2026-11-02, e a CI não tinha rodado no branch (ela dispara em `pull_request`).
 
 Próximo passo exato:
-1. Conferir os três jobs da CI pela API (o job `browser` roda os 3 testes novos do Firefox pela primeira vez).
-2. **Revisão independente por sessão nova**, só leitura, sobre o diff do PR 1 (como na Etapa 5). Corrigir os achados com teste e mutação.
-3. Daniel abre o PR como rascunho; ele só é mergeado depois do PR do kit 3.1.1 / adapter 6.0.1 (2026-11-06).
-4. Depois: PR 2 (`etapa-6/interface`).
+1. Daniel confere se o PR #27 existe; com ele aberto, conferir os três jobs da CI (o job `browser` roda os 3 testes do Firefox pela primeira vez).
+2. **Revisão independente por sessão nova**, só leitura, sobre o diff do PR 1, depois destas correções. Corrigir os achados com teste e mutação.
+3. O PR só é mergeado depois do PR do kit 3.1.1 / adapter 6.0.1 (2026-11-06).
+4. Depois: PR 2 (`etapa-6/interface`). **Obrigatório nele:** o aviso de imagens bloqueadas (e os avisos da versão em texto) sai do iframe e vai para a página. Regra: tudo o que o webmail diz ao usuário fica fora do iframe, porque o CSS do e-mail pode esconder ou falsificar o aviso (`docs/decisoes.md`).
 
-Para a Etapa 7 (decisão antes do primeiro deploy): isolar a sanitização num container próprio, sem segredos, `network_mode: none`, sistema de arquivos só de leitura e limite próprio de memória (`docs/decisoes.md`, "Leitura segura de mensagens").
+Para a Etapa 7 (decisão antes do primeiro deploy): isolar a sanitização num container próprio, sem segredos, `network_mode: none`, sistema de arquivos só de leitura e limite próprio de memória (`docs/decisoes.md`, "Leitura segura de mensagens"). Limite de memória proposto para o webmail: 2 GiB, medir de novo na VPS.
 
 ## Etapa 5: em andamento
 

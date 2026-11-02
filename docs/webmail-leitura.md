@@ -79,6 +79,25 @@ Conclusões:
 - **Cada worker com `resourceLimits`** (teto de memória do heap) e um tempo máximo. Se passar, o worker é encerrado e recriado, e a página mostra o texto e o botão do `.eml`, como no HTML grande.
 - O VPS tem outro processador. **Medir de novo na Etapa 7**, já no container.
 
+### Memória real (RSS) com as entradas que estouram
+
+O heap (`maxOldGenerationSizeMb`) não é toda a memória de um worker: o RSS do processo inclui a geração nova do V8, o código e a memória nativa do jsdom. Por isso a medida que vale para o limite do container é o **RSS do processo inteiro**. Medido em 2026-11-02 neste servidor, Node 24.22.1, com o pool real (2 workers, 512 MB de heap cada, 10 s), dois pedidos iguais ao mesmo tempo, workers já aquecidos. Pico amostrado a cada 20 ms e conferido pelo `VmHWM` do `/proc/self/status`. Script fora do repositório.
+
+| Entrada (abaixo de 1 MB) | Tamanho | Resultado | Tempo | RSS antes | Pico de RSS |
+|---|---|---|---|---|---|
+| Newsletter de 1 MB | 967 KB | ok, ok | 0,9 s | 366 MiB | 698 MiB |
+| 240 mil `<br>` | 938 KB | estouro do heap nos dois | 6,2 s | 385 MiB | **1383 MiB** |
+| 200 mil `<a>` dentro de `<table>` | 586 KB | ok, ok (no limite) | 3,8 s | 388 MiB | **1404 MiB** |
+| 200 mil `<div>` aninhados | 977 KB | tempo máximo nos dois | 10 s | 366 MiB | 404 MiB |
+| 300 mil `<b>` | 879 KB | tempo máximo nos dois | 10 s | 384 MiB | 414 MiB |
+| 60 mil atributos num elemento | 634 KB | tempo máximo nos dois | 10 s | 384 MiB | 403 MiB |
+
+- **Pior caso: cerca de 1,4 GiB** para o processo, com os dois workers no teto de 512 MB. Cada worker no teto soma uns 500 MiB de RSS. As entradas que travam por tempo quase não gastam memória.
+- O servidor de verdade (o build, parado) usa 86 MiB, contra 44 MiB de um Node vazio: **+42 MiB** sobre a base medida acima.
+- Somando dois logins ao mesmo tempo (argon2id, 2 × 64 MiB): **cerca de 1,6 GiB** no pior caso.
+
+**Proposta para a Etapa 7: limite de memória de 2 GiB no container do webmail** (`mem_limit: 2g` e `memswap_limit: 2g`, sem swap). Sobram cerca de 400 MiB acima do pior caso. Assim, quem estoura é o worker (o V8 encerra a thread no teto de heap, a mensagem cai no texto), e não o container (o OOM killer do kernel derrubaria o webmail inteiro, logins incluídos). A VPS é exclusiva do webmail: 2 GiB para ele, mais o cloudflared, cabem nos 4 GB. Medir de novo na VPS com `docker stats` durante o teste das entradas acima; se a sanitização for para um container próprio, dividir o limite entre os dois. Teste: `sanitize-pool.test.ts` roda os dois `<br>` juntos e exige que os dois workers estourem sozinhos, com o RSS subindo menos de 1200 MiB.
+
 ## `srcdoc` herda a CSP da página
 
 - Um iframe com `srcdoc` recebe a política da página-mãe. Fontes:
@@ -161,5 +180,5 @@ Achados durante a implementação:
 
 - **`security-audit` (2026-11-02): a limpeza de CSS era quadrática.** Uma expressão com `[^;{}]*` antes das alternativas levava 2,1 s em 40 KB de CSS sem `;`, `{` ou `}`; com 1 MB, prenderia o worker até o tempo máximo (10 s), e a mensagem cairia no texto. Agora o CSS é dividido em `;`, `{` e `}`, e cada pedaço que carrega algo sai (tempo linear). Um teste com 1 MB exige menos de 1 s; com a expressão antiga de volta, o teste não termina.
 - **Downloads com `Content-Encoding`:** o `fetch` descomprime o corpo, então o `Content-Length` do Worker só é repassado quando a resposta não vem comprimida.
-- **Entradas que travam ou estouram a sanitização existem, abaixo de 1 MB.** Medido com tempo máximo de 60 s: 200 mil `<div>` aninhados (977 KB) e 300 mil `<b>` passam de 60 s; 60 mil atributos num elemento levam 59 s; 240 mil `<br>` e 200 mil `<a>` dentro de `<table>` derrubam o worker em 6 a 7 s. Em produção, o tempo máximo (10 s) e o teto de memória limitam o estrago: o worker é encerrado, a mensagem cai no texto e o próximo pedido ganha um worker novo. O teste HTTP contra o build usa os `<div>` aninhados.
+- **Entradas que travam ou estouram a sanitização existem, abaixo de 1 MB** (memória medida em "Memória real (RSS)", acima). Medido com tempo máximo de 60 s: 200 mil `<div>` aninhados (977 KB) e 300 mil `<b>` passam de 60 s; 60 mil atributos num elemento levam 59 s; 240 mil `<br>` e 200 mil `<a>` dentro de `<table>` derrubam o worker em 6 a 7 s. Em produção, o tempo máximo (10 s) e o teto de memória limitam o estrago: o worker é encerrado, a mensagem cai no texto e o próximo pedido ganha um worker novo. O teste HTTP contra o build usa os `<div>` aninhados.
 

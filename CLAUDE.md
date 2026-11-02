@@ -90,7 +90,7 @@ Invariantes:
 5. Login do webmail: **usuário + senha (argon2id) + 2FA TOTP obrigatório**, rate limit e IP ban. Sem cadastro público.
 6. HTML de e-mail: sempre sanitizado (DOMPurify) e exibido em `<iframe sandbox>` sem scripts. Imagens remotas bloqueadas por padrão.
 7. A API do Worker verifica a permissão do usuário sobre a caixa **em toda rota**.
-8. Dependências: só adicione as necessárias e explique por que cada uma entra. Licença do projeto: **AGPL-3.0-only**. Só use dependências com licença compatível (MIT, BSD, Apache-2.0, ISC, LGPL, GPL/AGPL, BlueOak-1.0.0, CC0-1.0) e me avise de qualquer exceção. O webmail terá um link para o código-fonte no rodapé, como a AGPL pede.
+8. Dependências: só adicione as necessárias e explique por que cada uma entra. Licença do projeto: **AGPL-3.0-only**. Só use dependências com licença compatível (MIT, MIT-0, BSD, Apache-2.0, ISC, LGPL, GPL/AGPL, BlueOak-1.0.0, CC0-1.0) e me avise de qualquer exceção. O webmail terá um link para o código-fonte no rodapé, como a AGPL pede.
 9. Commits usam o e-mail **noreply do GitHub**. Nunca altere `git config user.email`.
 10. **Administração:** a CLI (`pnpm admin ...`) vem primeiro e continua existindo para sempre. O painel web só entra na etapa própria, com estas regras:
     - **Todas** as páginas, ações e endpoints de administração ficam sob o caminho `/admin`. Nada administrativo em `/api/...` ou em outro caminho, senão escapa da proteção do Cloudflare Access.
