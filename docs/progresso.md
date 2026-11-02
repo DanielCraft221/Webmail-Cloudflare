@@ -4,7 +4,7 @@ Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo pas
 
 ## Roteiro (atualizado em 2026-11-01)
 
-Produção do webmail numa VPS própria (`survivus-vps01`, OVHcloud BHS); o servidor de casa vira o de desenvolvimento (`docs/decisoes.md`). O `CLAUDE.md` ainda não foi atualizado.
+Produção do webmail numa VPS própria (`survivus-vps01`, OVHcloud BHS); o servidor de casa vira o de desenvolvimento (`docs/decisoes.md`). O `CLAUDE.md` foi atualizado em 2026-11-02 (PR #25).
 
 | Ordem | Etapa | Onde |
 |---|---|---|
@@ -59,7 +59,7 @@ Falta para fechar a Etapa 5:
     4. Todo build é produção (`!dev`), sem depender do `NODE_ENV`.
     5. Ban gerado no `/setup` vai para a auditoria, pelo mesmo helper do login.
   - **CI:** o job `browser` rodou pela primeira vez e achou dois problemas. A pasta `test-results/` não existia num checkout limpo. O mais grave: `Referrer-Policy: no-referrer` faz o navegador mandar `Origin: null` em todo POST (especificação Fetch), o CSRF recusava o login, e em produção ninguém entraria. Agora `same-origin` (decisão de Daniel); o CSRF não mudou. Um segundo build com a origem de produção prova que outra origem, inclusive `null`, recebe 403.
-  - **Decisão de Daniel: produção do webmail numa VPS própria** (`survivus-vps01`, OVHcloud BHS). Roteiro e regras no topo deste arquivo e em `docs/decisoes.md`. O `CLAUDE.md` ainda não foi atualizado.
+  - **Decisão de Daniel: produção do webmail numa VPS própria** (`survivus-vps01`, OVHcloud BHS). Roteiro e regras no topo deste arquivo e em `docs/decisoes.md`. O `CLAUDE.md` foi atualizado depois, em 2026-11-02 (PR #25).
   - Testes: Worker 191, webmail 98 unitários + 26 HTTP (dois builds), shared 15; Firefox na CI. CI verde nos três jobs (`63afd2a`).
 
 ### Falta
