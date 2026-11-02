@@ -49,9 +49,12 @@ Internet ──MX──> Cloudflare Email Routing ──> Worker "mail-core" (ap
                                                         ▲
 nLogin / NodeBB ──SMTP 465 (um token cada)──> smtp.mx.cloudflare.net (não passa por este projeto)
                                                         ▲
-Navegador ─> Cloudflare ─> Tunnel ─> [Servidor Debian 13, Docker]
-                                      ├─ rede "webmail": cloudflared + webmail (SvelteKit/Node)
-                                      └─ rede "sites":   cloudflared + nginx (outros sites, fora deste repo)
+Navegador ─> Cloudflare ─> Tunnel ─> [VPS survivus-vps01: OVHcloud BHS, Debian 13, 2 vCPU, 4 GB, Docker]
+                                      └─ rede "webmail": cloudflared + webmail (SvelteKit/Node)
+
+CI (GitHub Actions) ──imagem──> GHCR ──pull por digest, feito por Daniel──> VPS
+
+[Servidor de casa, Debian 13]: desenvolvimento (onde você roda), Minecraft (nLogin), NodeBB e outros sites (fora deste repo)
 ```
 
 Invariantes:
@@ -59,8 +62,14 @@ Invariantes:
 - **O webmail nunca acessa D1/R2 diretamente**, só a API do Worker. Ele guarda localmente (SQLite) apenas sessões, rate limit e bans, tudo descartável.
 - **O container do webmail não publica portas** (`ports:` proibido no compose). Ele só pode ser alcançado pelo cloudflared, numa rede Docker exclusiva. Portas publicadas pelo Docker ignoram o ufw.
 - **O Nginx não fica na frente do webmail.** O IP real vem de `CF-Connecting-IP`, que só é confiável porque apenas o cloudflared alcança o webmail.
-- O servidor de produção é a mesma máquina onde você roda. **Cuidado redobrado.**
-- A mesma máquina roda também o servidor Minecraft (com nLogin) e o NodeBB. **Todo container tem limite de memória e de CPU** no compose, para o Minecraft não derrubar o webmail por falta de RAM. Dimensione para o hardware atual (16 GB), não para upgrades futuros.
+- **A produção do webmail fica na VPS `survivus-vps01`, exclusiva dele:** só Docker, o webmail e o cloudflared (`docs/decisoes.md`, "Produção do webmail numa VPS própria").
+- **Você roda só no servidor de casa e nunca acessa a VPS**: nem por SSH, nem por nenhum outro meio. Daniel prepara a VPS sozinho (Etapa 0-VPS) e faz cada deploy nela.
+- **A VPS não tem porta aberta.** O webmail chega pelo Tunnel. O SSH só pelo Tailscale, com a etiqueta `tag:vps`, sem acesso à tailnet.
+- **Deploy do webmail:** a CI monta a imagem e publica no GHCR; Daniel faz o pull na VPS **por digest**, nunca por tag. **Nenhuma credencial da VPS vai para o GitHub.**
+- **O `ADMIN_API_TOKEN` e o token do Wrangler nunca vão para a VPS.** A CLI de usuários (`user:*`, `audit:list`) roda em casa, contra a API do Worker. Na VPS, a CLI só mexe em sessões, bans e bloqueios locais, dentro do container.
+- O servidor de casa continua rodando o Minecraft (com nLogin), o NodeBB e outros sites. **Cuidado redobrado** com qualquer comando nele.
+- **Todo container tem limite de memória e de CPU** no compose. Dimensione para a VPS atual (4 GB), não para upgrades futuros.
+- cloudflared com `--protocol http2`: o firewall de borda da OVH não deixa passar QUIC.
 
 ## Stack
 
@@ -98,9 +107,10 @@ Invariantes:
 |---|---|---|
 | Secrets do Worker (tokens da API interna, etc.) | `wrangler secret put` | Em `wrangler.toml` ou em qualquer arquivo commitado |
 | Desenvolvimento local do Worker | `apps/mail-core/.dev.vars` | Commitado |
-| Config do webmail em produção | `/srv/webmail/.env` no servidor, dono `root`, `chmod 600`, lido via `env_file` do compose | Dentro do repositório, dentro da imagem Docker, em pasta servida pelo Nginx |
-| Token do Cloudflare Tunnel | `/srv/cloudflared/.env`, `chmod 600` | Em compose commitado ou em linha de comando visível no `ps` |
-| Token da Cloudflare para Wrangler (deploy) | Variável de ambiente da sessão ou arquivo `chmod 600` fora do repositório | Em `.bashrc` compartilhado ou commitado |
+| Config do webmail em produção | `/srv/webmail/.env` na VPS, dono `root`, `chmod 600`, lido via `env_file` do compose | Dentro do repositório, dentro da imagem Docker, no GitHub |
+| Token do Cloudflare Tunnel | `/srv/cloudflared/.env` na VPS, `chmod 600` | Em compose commitado, no GitHub ou em linha de comando visível no `ps` |
+| Token de admin da API (`ADMIN_API_TOKEN`) | `~/.config/webmail/admin.env` no servidor de casa, `chmod 600` | Na VPS, no `webmail.env`, no GitHub |
+| Token da Cloudflare para Wrangler (deploy) | Arquivo `chmod 600` fora do repositório, no servidor de casa, carregado só na sessão | Na VPS, em `.bashrc` compartilhado, commitado |
 | Token SMTP do nLogin | Config do nLogin no servidor Minecraft, arquivo legível só pelo usuário do servidor | Reaproveitado; em print de tela, log ou backup público |
 | Token SMTP do NodeBB | Painel admin do NodeBB (fica no banco do NodeBB) | Reaproveitado; em print de tela ou dump de banco compartilhado |
 
@@ -152,19 +162,22 @@ Regras:
 
 | Etapa | Conteúdo |
 |---|---|
-| 0 | Preparação manual do servidor (feita por mim, sem Claude Code) |
+| 0 | Preparação manual do servidor de casa (feita por mim, sem Claude Code) |
 | 1 | Repositório, monorepo, lint, testes, CI, gitleaks, documentação base |
 | 2 | Worker: recebimento de e-mails de `survivus.com.br` → R2 + D1 |
 | 3 | Worker: API interna de leitura com verificação de permissão |
 | 4 | Envio para serviços: Email Sending em `mail.survivusmc.com` (SPF, DKIM, DMARC), token por serviço, configuração do nLogin e do NodeBB, teste de entrega |
 | 5 | Webmail: login, 2FA, sessões, rate limit, IP ban, CLI de administração |
 | 6 | Webmail: caixas, lista e leitura de mensagens com HTML sanitizado |
-| 7 | Docker Compose (webmail + cloudflared) e Tunnel para `webmail.survivus.com.br` |
+| 0-VPS | Preparação manual da VPS (feita por mim, sem Claude Code): Docker, Tailscale com `tag:vps`, nenhuma porta aberta |
+| 7 | Primeiro deploy, só leitura: imagem montada pela CI e publicada no GHCR, Docker Compose (webmail + cloudflared) na VPS, pull por digest, Tunnel para `webmail.survivus.com.br` |
 | 8 | Envio e resposta pelo webmail |
 | 9 | Múltiplos usuários e permissões por caixa (via CLI) |
 | 10 | **Painel de administração** em `/admin`: usuários e 2FA, caixas e permissões, segurança (bans, sessões, auditoria), envio (logs de entrega e inventário de tokens). Cloudflare Access + validação do JWT |
 | 11 | Domínio `survivusmc.com` |
 | 12 | Domínio `dirdistribuidora.com.br` (antes: reavaliar o relay interno para os tokens SMTP) |
+
+As etapas 1 a 6 rodam no servidor de casa. A Etapa 0-VPS vem no fim da Etapa 6. Da Etapa 8 em diante, cada etapa termina com um deploy pequeno na VPS, feito por mim.
 
 Ideias novas não entram no roteiro direto: vão para a seção "Depois" do `docs/progresso.md` e só sobem quando eu decidir.
 
