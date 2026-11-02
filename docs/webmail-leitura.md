@@ -161,3 +161,5 @@ Achados durante a implementação:
 
 - **`security-audit` (2026-11-02): a limpeza de CSS era quadrática.** Uma expressão com `[^;{}]*` antes das alternativas levava 2,1 s em 40 KB de CSS sem `;`, `{` ou `}`; com 1 MB, prenderia o worker até o tempo máximo (10 s), e a mensagem cairia no texto. Agora o CSS é dividido em `;`, `{` e `}`, e cada pedaço que carrega algo sai (tempo linear). Um teste com 1 MB exige menos de 1 s; com a expressão antiga de volta, o teste não termina.
 - **Downloads com `Content-Encoding`:** o `fetch` descomprime o corpo, então o `Content-Length` do Worker só é repassado quando a resposta não vem comprimida.
+- **Entradas que travam ou estouram a sanitização existem, abaixo de 1 MB.** Medido com tempo máximo de 60 s: 200 mil `<div>` aninhados (977 KB) e 300 mil `<b>` passam de 60 s; 60 mil atributos num elemento levam 59 s; 240 mil `<br>` e 200 mil `<a>` dentro de `<table>` derrubam o worker em 6 a 7 s. Em produção, o tempo máximo (10 s) e o teto de memória limitam o estrago: o worker é encerrado, a mensagem cai no texto e o próximo pedido ganha um worker novo. O teste HTTP contra o build usa os `<div>` aninhados.
+

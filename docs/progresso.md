@@ -42,7 +42,7 @@ Feito:
 - Pesquisa da tarefa 1 em `docs/webmail-leitura.md` (DOMPurify 3.4.17 com jsdom 30.1.3, avisos, custo medido, `srcdoc`, CSP `sandbox`, atributos do iframe, licenças).
 - Decisões de Daniel: limite de 1 MB de HTML; licenças BlueOak-1.0.0 e CC0-1.0 aceitas (regra 8 do `CLAUDE.md`); página mínima de leitura no PR 1; worker com `env: {}`; worker que estoura é encerrado e nunca reaproveitado; o teste "nenhuma requisição sai de localhost" prova o bloqueio do CSS.
 - Código: sanitização em 2 `worker_threads` (503 no terceiro), rota do corpo com CSP própria, `X-Frame-Options: SAMEORIGIN` só nela, página mínima com o iframe, downloads com cabeçalhos do webmail, `contentDisposition` no `packages/shared`.
-- Testes: corpus de ataques e mXSS, workers (ambiente vazio, travado, memória, 503, 1 MB), 13 testes HTTP novos (39 no total), 3 no Firefox (só na CI). Mutações das três camadas e dos workers: todas derrubam algum teste.
+- Testes: corpus de ataques e mXSS, workers (ambiente vazio, travado, memória, 503, 1 MB), 14 testes HTTP novos (40 no total), 3 no Firefox (só na CI). Contra o build: o 503 e um worker travado de verdade (200 mil `<div>` aninhados), encerrado no tempo máximo de 10 s enquanto o servidor continua respondendo. Mutações das três camadas e dos workers: todas derrubam algum teste.
 - `security-audit`: a limpeza de CSS era quadrática (2 s em 40 KB); agora é linear, com teste. Documentado em `docs/webmail-leitura.md`.
 
 Próximo passo exato:
@@ -50,6 +50,8 @@ Próximo passo exato:
 2. **Revisão independente por sessão nova**, só leitura, sobre o diff do PR 1 (como na Etapa 5). Corrigir os achados com teste e mutação.
 3. Daniel abre o PR como rascunho; ele só é mergeado depois do PR do kit 3.1.1 / adapter 6.0.1 (2026-11-06).
 4. Depois: PR 2 (`etapa-6/interface`).
+
+Para a Etapa 7 (decisão antes do primeiro deploy): isolar a sanitização num container próprio, sem segredos, `network_mode: none`, sistema de arquivos só de leitura e limite próprio de memória (`docs/decisoes.md`, "Leitura segura de mensagens").
 
 ## Etapa 5: em andamento
 
@@ -259,7 +261,6 @@ Ideias que ainda não entraram no roteiro.
 - (Etapa 6) Selo de remetente verificado, com um `Authentication-Results` confiável.
 - (Etapa 6) Mostrar o destino real de um link antes de abrir.
 - (Etapa 6) Visão por conversa.
-- (Etapa 6) Isolar a sanitização num processo separado, com outro usuário do sistema (hoje é uma thread do mesmo processo; `docs/decisoes.md`).
 - (Etapa 6) O Worker passar a usar o `contentDisposition` do `packages/shared` na próxima mudança dele.
 - `scripts/smoke-api.sh` recusar um `MAIL_API_URL` diferente de `https://mail-api.survivus.com.br`, para nunca mandar os tokens a outro host.
 - Tail Worker que receba os eventos do `mail-core` e guarde só os campos do nosso `log()`, sem `mailFrom`, `rcptTo` nem URL (os Workers Logs ficam desligados, `docs/decisoes.md`). Precisa de um lugar para guardar (D1 ou R2) e de uma retenção definida.
