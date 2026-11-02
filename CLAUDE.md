@@ -66,7 +66,7 @@ Invariantes:
 
 - TypeScript `strict` em tudo. Monorepo **pnpm workspaces**:
   - `apps/mail-core`: Cloudflare Worker (Hono, `postal-mime`), Cloudflare Queues, testes com `@cloudflare/vitest-plugin`
-  - `apps/webmail`: SvelteKit + `adapter-node`, SQLite (`better-sqlite3`), roda em container
+  - `apps/webmail`: SvelteKit 3 + `adapter-node`, SQLite (`node:sqlite`, do próprio Node), roda em container. Usa o TypeScript 6 (o kit e o `svelte-check` ainda não aceitam o 7; `docs/decisoes.md`)
   - `packages/shared`: tipos e schemas `zod` compartilhados
 - Testes: Vitest. Lint/format: Biome.
 - **Código, nomes e comentários em inglês. Documentação e mensagens para mim em português.**
@@ -179,4 +179,7 @@ Ideias novas não entram no roteiro direto: vão para a seção "Depois" do `doc
 - `pnpm --filter @webmail/mail-core types`: regenera `apps/mail-core/worker-configuration.d.ts` depois de mudar o `wrangler.jsonc`
 - `pnpm --filter mail-core inbox:list`: lista as 20 últimas mensagens do D1 remoto (com `spf`, `dkim`, `dmarc`), só leitura, sem corpo nem endereço completo do remetente (precisa do token carregado, veja `docs/cloudflare.md`)
 - `scripts/smoke-api.sh`: teste de fumaça da API interna em produção, para rodar depois de todo deploy (`docs/cloudflare.md`, seção 8.5)
+- `pnpm admin <comando>`: CLI de administração do webmail (usuários, sessões, bans, auditoria). Lê `~/.config/webmail/admin.env` (`chmod 600`). Comandos em `docs/admin-cli.md`
+- `pnpm --filter @webmail/webmail dev`: webmail em `http://127.0.0.1:5173`, com o `webmail.env` carregado só nessa sessão: `(set -a; . ~/.config/webmail/webmail.env; set +a; pnpm --filter @webmail/webmail dev)`. Nunca `--host`
+- `pnpm --filter @webmail/webmail test:http`: build de produção + testes do Playwright sem navegador (já rodam no `pnpm test`); `test:browser` roda os do Firefox, só na CI
 - `scripts/smtp-test.sh <arquivo-do-token> <remetente> <destino>`: envia uma mensagem de teste pelo SMTP da Cloudflare, com o token lido de um arquivo `chmod 600` (`docs/smtp-servicos.md`)

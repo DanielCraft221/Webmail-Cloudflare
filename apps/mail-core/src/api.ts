@@ -113,8 +113,10 @@ export function createApi(keys: AccessKeys): Hono<Api> {
     if (group === "user") {
       const userId = schema.messageId.safeParse(c.req.header("X-Webmail-User"));
       if (!userId.success) return error(c, 401, "unauthorized");
+      // Disabled, or reset and not configured again: no session of theirs may read anything.
       const user = await env.DB.prepare(
-        "SELECT id FROM users WHERE id = ?1 AND active = 1",
+        `SELECT id FROM users WHERE id = ?1 AND active = 1
+           AND password_hash IS NOT NULL AND totp_secret_enc IS NOT NULL`,
       )
         .bind(userId.data)
         .first<{ id: string }>();
@@ -376,7 +378,7 @@ export function createApi(keys: AccessKeys): Hono<Api> {
 
   app.get("/v1/me", async (c) => {
     const user = await c.env.DB.prepare(
-      "SELECT id, username, display_name, role FROM users WHERE id = ?1",
+      "SELECT id, username, display_name, role, updated_at FROM users WHERE id = ?1",
     )
       .bind(c.get("userId"))
       .first<{
@@ -384,6 +386,7 @@ export function createApi(keys: AccessKeys): Hono<Api> {
         username: string;
         display_name: string | null;
         role: string;
+        updated_at: string | null;
       }>();
     if (!user) return error(c, 401, "unauthorized");
     return c.json({
@@ -391,6 +394,8 @@ export function createApi(keys: AccessKeys): Hono<Api> {
       username: user.username,
       displayName: user.display_name,
       role: user.role,
+      // The webmail drops sessions created before this (reset, setup, PATCH all set it).
+      updatedAt: user.updated_at,
     });
   });
 

@@ -1,2 +1,2 @@
-export * as api from "./api";
-export { mailboxAddress } from "./mailbox-address";
+export * as api from "./api.ts";
+export { mailboxAddress } from "./mailbox-address.ts";

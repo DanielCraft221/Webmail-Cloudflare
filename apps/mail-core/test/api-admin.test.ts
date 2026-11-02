@@ -185,6 +185,11 @@ describe("token separation", () => {
 
 describe("POST /v1/auth/lookup", () => {
   it("returns the login data, with nulls while setup is pending", async () => {
+    await env.DB.prepare(
+      "UPDATE users SET password_hash = NULL, totp_secret_enc = NULL WHERE id = ?1",
+    )
+      .bind(DANIEL)
+      .run();
     const response = await service("/v1/auth/lookup", {
       username: "danielcraft221",
     });
@@ -333,13 +338,90 @@ describe("setup link", () => {
 
 describe("GET /v1/me", () => {
   it("returns the session user", async () => {
+    await env.DB.prepare("UPDATE users SET updated_at = ?2 WHERE id = ?1")
+      .bind(DANIEL, "2026-11-01T12:00:00.000Z")
+      .run();
     const response = await call("/v1/me");
     expect(schema.meResponse.parse(await response.json())).toEqual({
       id: DANIEL,
       username: "danielcraft221",
       displayName: "Daniel",
       role: "admin",
+      updatedAt: "2026-11-01T12:00:00.000Z",
     });
+  });
+
+  it("closes every user route after a reset, until setup is done again", async () => {
+    const { id, hash } = await createUser("t-reset");
+    const complete = (tokenHash: string) =>
+      service("/v1/auth/setup/complete", {
+        tokenHash,
+        passwordHash: PASSWORD_HASH,
+        totpSecretEnc: TOTP_ENC,
+      });
+    expect((await call("/v1/me", { user: id })).status).toBe(401);
+    expect((await complete(hash)).status).toBe(200);
+    expect((await call("/v1/me", { user: id })).status).toBe(200);
+
+    const next = await setupToken();
+    await admin(`/v1/admin/users/${id}/reset`, {
+      method: "POST",
+      body: { setupTokenHash: next.hash },
+    });
+    expect((await call("/v1/me", { user: id })).status).toBe(401);
+    expect((await call("/v1/mailboxes", { user: id })).status).toBe(401);
+    expect((await complete(next.hash)).status).toBe(200);
+    expect((await call("/v1/me", { user: id })).status).toBe(200);
+  });
+
+  it.each([["password_hash"], ["totp_secret_enc"]])(
+    "answers 401 when only %s is missing",
+    async (column) => {
+      await env.DB.prepare(`UPDATE users SET ${column} = NULL WHERE id = ?1`)
+        .bind(DANIEL)
+        .run();
+      expect((await call("/v1/me")).status).toBe(401);
+      expect((await call("/v1/mailboxes")).status).toBe(401);
+    },
+  );
+
+  it("returns updatedAt, moved forward by setup, PATCH and reset", async () => {
+    const { id, hash } = await createUser("t-mudancas");
+    const stored = async () =>
+      (
+        await env.DB.prepare("SELECT updated_at FROM users WHERE id = ?1")
+          .bind(id)
+          .first<{ updated_at: string }>()
+      )?.updated_at ?? "";
+    const tick = () => new Promise((r) => setTimeout(r, 5));
+    const seen = [await stored()];
+    await tick();
+    await service("/v1/auth/setup/complete", {
+      tokenHash: hash,
+      passwordHash: PASSWORD_HASH,
+      totpSecretEnc: TOTP_ENC,
+    });
+    seen.push(await stored());
+    const me = schema.meResponse.parse(
+      await (await call("/v1/me", { user: id })).json(),
+    );
+    expect(me.updatedAt).toBe(seen.at(-1));
+    await tick();
+    await admin(`/v1/admin/users/${id}`, {
+      method: "PATCH",
+      body: { displayName: "Outro nome" },
+    });
+    seen.push(await stored());
+    await tick();
+    await admin(`/v1/admin/users/${id}/reset`, {
+      method: "POST",
+      body: { setupTokenHash: (await setupToken()).hash },
+    });
+    seen.push(await stored());
+    for (let i = 1; i < seen.length; i++)
+      expect(Date.parse(seen[i] ?? "")).toBeGreaterThan(
+        Date.parse(seen[i - 1] ?? ""),
+      );
   });
 
   it("answers 401 once the user is disabled", async () => {

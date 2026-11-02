@@ -2,34 +2,64 @@
 
 Atualizado ao fim de toda sessão: o que foi feito, o que falta e o próximo passo exato.
 
-## Etapa atual: 5 (em andamento: PR 2 em revisão)
+## Roteiro (atualizado em 2026-11-01)
+
+Produção do webmail numa VPS própria (`survivus-vps01`, OVHcloud BHS); o servidor de casa vira o de desenvolvimento (`docs/decisoes.md`). O `CLAUDE.md` ainda não foi atualizado.
+
+| Ordem | Etapa | Onde |
+|---|---|---|
+| 1 | Etapa 5: login, 2FA, sessões, limites, CLI (em andamento) | casa |
+| 2 | Etapa 6: caixas, lista e leitura de mensagens | casa |
+| 3 | **Etapa 0-VPS**: Daniel prepara a VPS sozinho (Docker, Tailscale com `tag:vps`, nenhuma porta aberta). Claude Code não participa nem acessa a VPS | VPS |
+| 4 | Etapa 7: primeiro deploy, só leitura. Imagem montada pela CI e publicada no GHCR; Daniel faz o pull na VPS por digest. cloudflared com `--protocol http2`, limites para 4 GB, cookie `__Host-` testado no Chrome com HTTPS real | CI + VPS |
+| 5 | Etapas 8 a 12, cada uma com um deploy pequeno | casa + VPS |
+
+## Etapa atual: 5 (em andamento: PR 3, webmail e CLI)
 
 ### Próximo passo
 
-PR 2 (`etapa-5/worker-deploy`), `docs/cloudflare.md` seção 9, cada passo na Cloudflare com o "ok" de Daniel:
-- Feito: `admin.env` e `webmail.env` criados (9.1); `ADMIN_API_TOKEN` gravado no Worker (9.2).
-- Feito: migração `0003` no D1 remoto (2026-11-01). Conferido: nenhuma pendente, colunas e índices novos existem, contagens iguais antes e depois (1 usuário, 7 mensagens, 3 caixas; `audit_log` vazio).
-- **Ponto de restauração** (Time Travel, lido às 2026-11-01T12:41:14Z, logo antes da migração, válido até 2026-12-01): `00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. Comando: `wrangler d1 time-travel restore webmail-db --bookmark=00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. **Restaurar volta o D1 inteiro**: e-mails recebidos depois do marcador perdem a linha no D1 (o `.eml` fica no R2). Usar só logo depois de uma migração com problema; mais tarde, só com um plano de reprocessamento (`docs/cloudflare.md`, seção 9.3).
-- Feito: deploy da `main` (`37d76bf`) em 2026-11-01. Versão anterior (código da Etapa 4 + secret novo): `2f832b04-2e59-440f-8f27-21fb6481d567`. Versão nova: `4ff110af-0455-4efa-b587-389197cb89ae`. Rollback: `pnpm exec wrangler rollback 2f832b04-2e59-440f-8f27-21fb6481d567`.
-- `scripts/smoke-api.sh` ganhou os testes de `GET /v1/me` e da separação dos tokens (lê só o `ADMIN_API_TOKEN` do `admin.env`).
-- `scripts/smoke-api.sh` rodado por Daniel depois do deploy: 20 PASS.
-- Falta: Daniel revisa e faz o merge do PR 2. Depois: `git pull --ff-only origin main` e PR 3 (`etapa-5/webmail`), começando pelo teste do SvelteKit e do `svelte-check` com o TypeScript 7.0.2.
+**PR 3 (#24, rascunho) pronto, aguardando só o `@sveltejs/kit` 3.1.1 e o `@sveltejs/adapter-node` 6.0.1.** CI verde nos três jobs (`secrets`, `quality`, `browser`) no `63afd2a`. Não começar a Etapa 6 antes do merge.
+
+1. **Em 2026-11-06** (a regra de 7 dias do pnpm libera o kit em 2026-11-05 e o adapter em 2026-11-06): no branch `etapa-5/webmail`, trocar para `@sveltejs/kit` 3.1.1 e `@sveltejs/adapter-node` 6.0.1 (e o `svelte` 5.57.3) em `apps/webmail/package.json`, `pnpm install`, `pnpm lint && pnpm typecheck && pnpm test`, commit, push, conferir os três jobs da CI pela API e reler o `docs/webmail-auth.md` (avisos de segurança e lista de padrões proibidos).
+2. Daniel lê linha por linha os arquivos sensíveis (`.github/workflows/ci.yml`, `.gitignore`, `CLAUDE.md`), atualiza a descrição do PR e faz o merge.
+3. Depois do merge, **nesta ordem** (o PR 3 muda o Worker: 401 para usuário sem senha ou 2FA e `updatedAt` no `GET /v1/me`; sem migração):
+   1. Deploy do Worker da `main` limpa (mostrar o comando e esperar o "ok"; anotar a versão anterior para o rollback). Tem de vir antes da tarefa 8: o webmail novo exige o `updatedAt` no `/v1/me`.
+   2. `scripts/smoke-api.sh` logo depois: **as checagens com o `SMOKE_USER_ID` (grupo usuário) vão dar 401**, porque o `danielcraft221` ainda não tem senha. Esperado. Access, tokens e rotas de serviço têm de passar; qualquer outra falha → rollback.
+   3. Tarefa 8 (conta real), com o "ok" de Daniel antes do `user:reset danielcraft221` (mexe no D1 de produção).
+   4. `scripts/smoke-api.sh` de novo: tudo PASS.
 
 ## Etapa 5: em andamento
 
-### Feito (2026-10-31)
+### Feito (2026-10-31 e 2026-11-01)
 
 - Pesquisa da tarefa 1 em `docs/webmail-auth.md`: SvelteKit 3 / adapter-node 6, argon2id nativo do Node (medido: 64 MiB, t=3 = 166 ms), TOTP, cookie `__Host-` em localhost, Node LTS.
 - Decisões de Daniel: ficar no Node 24 nesta etapa; `node:sqlite` em vez de `better-sqlite3` (o `CLAUDE.md` muda no PR 3); `@playwright/test` como devDependency, testes do navegador também na CI; coluna `source` no `audit_log`.
 - PR 1: migração `0003`, rotas `/v1/auth/*`, `/v1/me`, `/v1/audit` e `/v1/admin/*` (incluindo `POST /v1/admin/audit` para as ações locais da CLI), testes e `docs/api.md`.
 - PR 1 aprovado e no `main` (2026-11-01).
 - PR 1 com push no `etapa-5/worker`. Lint, typecheck e testes (15 + 187) passam; gitleaks limpo. security-audit: um achado baixo corrigido (caracteres de controle no audit e no `displayName`). Nada mudou na Cloudflare.
+- **PR 2 (2026-11-01), mergeado.** `docs/cloudflare.md`, seção 9:
+  - `admin.env` e `webmail.env` criados (9.1); `ADMIN_API_TOKEN` gravado no Worker (9.2).
+  - Migração `0003` no D1 remoto. Conferido: nenhuma pendente, colunas e índices novos existem, contagens iguais antes e depois (1 usuário, 7 mensagens, 3 caixas; `audit_log` vazio).
+  - **Ponto de restauração** (Time Travel, lido às 2026-11-01T12:41:14Z, logo antes da migração, válido até 2026-12-01): `00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. Comando: `wrangler d1 time-travel restore webmail-db --bookmark=00000018-00000000-00005116-75a348379796f1ae9cdc2e981d35c139`. **Restaurar volta o D1 inteiro**: e-mails recebidos depois do marcador perdem a linha no D1 (o `.eml` fica no R2). Usar só logo depois de uma migração com problema; mais tarde, só com um plano de reprocessamento (`docs/cloudflare.md`, seção 9.3).
+  - Deploy da `main` (`37d76bf`). Versão anterior (código da Etapa 4 + secret novo): `2f832b04-2e59-440f-8f27-21fb6481d567`. Versão nova: `4ff110af-0455-4efa-b587-389197cb89ae`. Rollback: `pnpm exec wrangler rollback 2f832b04-2e59-440f-8f27-21fb6481d567`.
+  - `scripts/smoke-api.sh` com os testes de `GET /v1/me` e da separação dos tokens: 20 PASS.
+- **PR 3 (#24), sessão de 2026-11-01 (tarde):**
+  - **Revisão independente por sessão nova** (só leitura): 5 achados, todos corrigidos com teste e mutação. Ela **substitui o scan do Claude Security**, que não roda aqui (exige o modo auto, que Daniel não vai ligar, e um Workflow que não existe).
+    1. Bloqueio por username: por username + origem (IPv4, ou `/48` do IPv6, porque a Hurricane Electric dá um `/48` de graça), mais um limite global de 50 em 15 minutos; tentativas durante o bloqueio não renovam. O ban por IP continua por `/64`.
+    2. Sessões após reset: o Worker responde 401 no grupo usuário sem `password_hash` ou `totp_secret_enc`; o `GET /v1/me` devolve `updatedAt`; o webmail apaga as sessões criadas antes dele. A configuração recomeça o histórico de passos TOTP (bug achado pelo e2e).
+    3. `TOTP_ENCRYPTION_KEY` de exemplo com tamanho inválido; o app recusa o valor atual e o antigo.
+    4. Todo build é produção (`!dev`), sem depender do `NODE_ENV`.
+    5. Ban gerado no `/setup` vai para a auditoria, pelo mesmo helper do login.
+  - **CI:** o job `browser` rodou pela primeira vez e achou dois problemas. A pasta `test-results/` não existia num checkout limpo. O mais grave: `Referrer-Policy: no-referrer` faz o navegador mandar `Origin: null` em todo POST (especificação Fetch), o CSRF recusava o login, e em produção ninguém entraria. Agora `same-origin` (decisão de Daniel); o CSRF não mudou. Um segundo build com a origem de produção prova que outra origem, inclusive `null`, recebe 403.
+  - **Decisão de Daniel: produção do webmail numa VPS própria** (`survivus-vps01`, OVHcloud BHS). Roteiro e regras no topo deste arquivo e em `docs/decisoes.md`. O `CLAUDE.md` ainda não foi atualizado.
+  - Testes: Worker 191, webmail 98 unitários + 26 HTTP (dois builds), shared 15; Firefox na CI. CI verde nos três jobs (`63afd2a`).
 
 ### Falta
 
-- PR 2: implantação do Worker (tarefa 7), em andamento.
-- PR 3: webmail e CLI. Primeiro passo: testar se o SvelteKit e o `svelte-check` funcionam com o TypeScript 7.0.2; se não, TypeScript 6 só no `apps/webmail`.
-- Tarefa 8 (conta real): o usuário do seed é **`danielcraft221`**, não `daniel`. O comando é `pnpm admin user:reset danielcraft221`.
+- PR 2: implantação do Worker (tarefa 7): feito e mergeado.
+- PR 3 (#24, rascunho, CI verde): falta só atualizar o kit e o adapter em 2026-11-06 (condição do merge), a revisão de Daniel e o merge. Depois: deploy do Worker, smoke test e tarefa 8 (Próximo passo, acima).
+- Atualizar o `CLAUDE.md` para a produção na VPS (quando Daniel decidir).
+- Tarefa 8 (conta real): o usuário do seed é **`danielcraft221`**, não `daniel`. O comando é `WEBMAIL_ORIGIN=http://localhost:5173 pnpm admin user:reset danielcraft221` (link para o `pnpm dev` pelo túnel; `docs/admin-cli.md`).
 
 ## Etapa 4: concluída (2026-10-31)
 
@@ -201,6 +231,7 @@ Etapa 2. O `docs/etapas/etapa-2.md` já está na pasta, mas ainda não foi commi
 
 Ideias que ainda não entraram no roteiro.
 
+- `scripts/smoke-api.sh` recusar um `MAIL_API_URL` diferente de `https://mail-api.survivus.com.br`, para nunca mandar os tokens a outro host.
 - Tail Worker que receba os eventos do `mail-core` e guarde só os campos do nosso `log()`, sem `mailFrom`, `rcptTo` nem URL (os Workers Logs ficam desligados, `docs/decisoes.md`). Precisa de um lugar para guardar (D1 ou R2) e de uma retenção definida.
 - Ferramenta de reprocessamento da DLQ: reenviar para a fila os `.eml` do R2 que não têm linha no D1 (DLQ expirada após 14 dias), usando o `customMetadata` do objeto. Tratar como duplicata, pela `dedupeKey`, a cópia que fica em `raw/` quando a fila falha no handler.
 - Alerta quando chegar mensagem na DLQ `mail-ingest-dlq`.

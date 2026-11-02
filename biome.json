@@ -26,5 +26,8 @@
         "organizeImports": "on"
       }
     }
+  },
+  "html": {
+    "experimentalFullSupportEnabled": true
   }
 }

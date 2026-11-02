@@ -104,11 +104,19 @@ export async function call(
   );
 }
 
+/** Fake values in the stored format: the user routes only open for users who finished setup. */
+export const FAKE_PASSWORD_HASH =
+  "$argon2id$v=19$m=65536,t=3,p=1$c2FsdHNhbHRzYWx0c2FsdA$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGg";
+export const FAKE_TOTP_ENC = "v1.aXZpdml2aXZpdml2.Y2lwaGVydGV4dGNpcGhlcnRleHQ";
+
 export async function addTestUsers() {
   await env.DB.batch([
     env.DB.prepare(
       "INSERT OR IGNORE INTO users (id, username, role) VALUES (?1, 'outro', 'user'), (?2, 'inativo', 'user')",
     ).bind(OTHER, INACTIVE),
+    env.DB.prepare(
+      "UPDATE users SET password_hash = ?4, totp_secret_enc = ?5 WHERE id IN (?1, ?2, ?3)",
+    ).bind(DANIEL, OTHER, INACTIVE, FAKE_PASSWORD_HASH, FAKE_TOTP_ENC),
     env.DB.prepare("UPDATE users SET active = 0 WHERE id = ?1").bind(INACTIVE),
     env.DB.prepare(
       "INSERT OR IGNORE INTO user_mailboxes (user_id, mailbox_id, can_read) SELECT ?1, id, 1 FROM mailboxes WHERE address = 'suporte@survivus.com.br'",

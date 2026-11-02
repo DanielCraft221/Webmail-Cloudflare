@@ -18,6 +18,13 @@ Fonte: [adapter-node](https://svelte.dev/docs/kit/adapter-node) e [Configuration
 - **`BODY_SIZE_LIMIT`:** padrão de 512 KB, suficiente para o login.
 - **CSRF:** `csrf.checkOrigin` está obsoleto e foi removido no 3.0. Hoje a opção é `csrf.trustedOrigins`, com padrão `[]`: só a própria origem pode enviar formulários (`POST`, `PUT`, `PATCH`, `DELETE`). **Nunca colocar `'*'`.** A checagem **só roda no build de produção**, não no `vite dev`. O teste de CSRF tem de rodar contra o build.
 - **CSP:** `kit.csp` com `mode: 'auto'`, que usa nonce nas páginas renderizadas no servidor e hash nas pré-renderizadas. O SvelteKit põe o nonce ou o hash nos `<script>` e `<style>` que ele mesmo gera. As diretivas vão em `csp.directives`. Em página pré-renderizada, o `frame-ancestors` é ignorado (vai por `<meta>`). Por isso nenhuma página nossa é pré-renderizada.
+- **Conferido ao montar o app (2026-11-01), o que mudou no kit 3:**
+  - O `svelte.config.js` não existe mais (`config_file_unsupported`): a configuração vai em `sveltekit({ ... })` no `vite.config.ts`.
+  - `$lib` virou `#lib`, declarado no campo `imports` do `package.json`, com extensão no import (`#lib/server/login.ts`).
+  - `$app/environment` virou `$app/env`. Os tipos dos hooks (`Handle`, `ServerInit`) vêm de `@sveltejs/kit/hooks`.
+  - O `tsconfig.json` estende `$app/tsconfig`, gerado pelo `svelte-kit sync`.
+  - O kit e o `svelte-check` precisam do TypeScript 6 (`docs/decisoes.md`).
+- **Versões:** kit 3.1.0, adapter-node 6.0.0 e svelte 5.57.2, porque a regra de 7 dias do pnpm barrou as mais novas. O kit 3.1.1 e o adapter-node 6.0.1 corrigem seis avisos de segurança; nenhum nos afeta como o app está, e `apps/webmail/test/forbidden-patterns.test.ts` impede o código de passar a usar o que eles corrigem. **O PR 3 só é mergeado depois de atualizar para essas versões** (`docs/progresso.md`).
 
 ### argon2id
 
@@ -78,17 +85,39 @@ Fonte: [calendário oficial](https://github.com/nodejs/Release/blob/main/schedul
 1. A CLI (`user:create` ou `user:reset`) gera um token aleatório, manda **só o SHA-256 dele** ao Worker (`POST /v1/admin/users` ou `/reset`) e mostra o link `/setup/<token>` uma única vez. O Worker define a validade de 24 h. O reset também apaga a senha e o segredo TOTP no D1 e a CLI derruba as sessões locais.
 2. Daniel manda o link à pessoa por um canal seguro.
 3. A pessoa abre o link. O webmail calcula o SHA-256 do token e chama `POST /v1/auth/setup/lookup`. Inválido, usado ou expirado: a página diz só que o link não vale.
-4. Ela define a senha (12 a 128 caracteres, diferente do username). O webmail gera o segredo TOTP, guarda os dois **em andamento no SQLite local por até 10 minutos** e mostra o QR code (gerado no servidor, imagem `data:`) e o segredo em texto.
-5. Ela confirma um código. Só então o webmail calcula o argon2id, cifra o segredo (AES-256-GCM, AAD = id do usuário) e chama `POST /v1/auth/setup/complete`, que grava tudo e apaga o link numa única operação.
+4. A página mostra o QR code (gerado no servidor, imagem `data:`) e o segredo em texto. O segredo fica **em andamento no SQLite local por até 10 minutos**, preso ao link; recarregar a página dentro desse prazo mostra o mesmo.
+5. Ela preenche **num único formulário** a senha (12 a 128 caracteres, diferente do username), a confirmação e um código do aplicativo. Assim a senha nunca fica guardada, nem por 10 minutos. Só com o código certo o webmail calcula o argon2id, cifra o segredo (AES-256-GCM, AAD = id do usuário) e chama `POST /v1/auth/setup/complete`, que grava tudo e apaga o link numa única operação.
+6. O código usado na configuração fica marcado como usado: não serve para o primeiro login. A página manda para `/login?configurado`.
+7. Link inválido e código errado contam como falha do IP (o mesmo ban do login). A página também tem limite de 30 pedidos por IP em 15 minutos.
 
 ### Login
 
 1. **Ban do IP checado primeiro** (IPv6 pelo `/64`), antes de ler o corpo e antes do argon2.
-2. Username bloqueado por excesso de falhas: recusa sem argon2, com a mensagem genérica.
+2. Username bloqueado por excesso de falhas (5 do mesmo IPv4 ou `/48` do IPv6, ou 50 de todos os IPs, em 15 minutos): recusa sem argon2, com a mensagem genérica. Tentativas durante o bloqueio não o renovam.
 3. `POST /v1/auth/lookup`. Usuário inexistente: verificação contra o hash falso, para gastar o mesmo tempo.
 4. Recusa se o usuário estiver inativo ou sem senha ou sem 2FA.
 5. argon2id (no máximo 2 ao mesmo tempo; além disso, `503`), depois o código TOTP (±1 passo, nunca um passo já usado).
-6. Qualquer falha: "Usuário, senha ou código inválidos", contada para o IP e para o username, e gravada no `audit_log` com o motivo interno. Sucesso: sessão nova (cookie com token de 32 bytes; o SQLite guarda só o SHA-256).
+6. Qualquer falha: "Usuário, senha ou código inválidos", contada para o IP e para o username, e gravada no `audit_log` com o motivo interno (`unknown_user`, `inactive`, `not_configured`, `bad_password`, `bad_code`, `code_reused`, `decrypt_failed`, `username_locked`). Sucesso: sessão nova (cookie com token de 32 bytes; o SQLite guarda só o SHA-256).
+7. Ban ativo: `429` com "Muitas tentativas. Tente de novo mais tarde.", sem ler o corpo, sem argon2 e sem chamar a API.
+
+### Sessão
+
+- Cookie `__Host-webmail_session` (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`). Só o `vite dev` usa `webmail_session`, porque o Chrome recusa `__Host-` em `http://localhost`.
+- Expira com 2 h sem uso ou 12 h de vida. No máximo 10 por usuário: a mais antiga cai.
+- O primeiro pedido depois do login e depois um a cada 5 minutos chamam `GET /v1/me`. Resposta `401` (usuário desativado): todas as sessões dele são apagadas. Erro de rede: `503`, sem entrar.
+
+### IP do cliente
+
+- Produção (todo build; só o `vite dev` não é, qualquer que seja o `NODE_ENV`): só o `CF-Connecting-IP`. Ausente ou inválido: `400`. O app não sobe sem `ADDRESS_HEADER=cf-connecting-ip`.
+- Desenvolvimento: o IP do socket.
+- IPv6 conta pelo bloco `/64` nos bans e no rate limit do `/setup`, e pelo `/48` no bloqueio de username (`docs/decisoes.md`).
+
+### Testes
+
+- **Unitários** (`apps/webmail/test`, Vitest): vetores da RFC 4648 (base32), da RFC 6238 (TOTP, SHA-1/256/512) e da RFC 9106 (argon2id), cifra com AAD, limites, sessões, login, configuração, CLI e a lista de padrões proibidos.
+- **HTTP contra o build de produção** (`apps/webmail/e2e/http`, Playwright, sem navegador): CSRF, cookie, cabeçalhos, `400` sem IP, app que não sobe, bans, bloqueios e fluxos completos. Depois deles, `e2e/logs.spec.ts` confere que nenhuma senha, código, token ou cookie usado chegou ao log do app. Rodam em todo `pnpm test`.
+- **Navegador** (`apps/webmail/e2e/browser`, Firefox): só na CI. O Firefox precisa de bibliotecas gráficas que pediriam `sudo` no servidor de produção.
+- Todos usam o Worker falso (`apps/webmail/test/fake-worker.ts`), que segue o `docs/api.md` com os schemas de `packages/shared`. Nunca a API real nem segredos reais.
 
 ### Formato do segredo cifrado
 

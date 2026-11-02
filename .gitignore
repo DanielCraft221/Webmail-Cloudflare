@@ -25,6 +25,9 @@ dist/
 build/
 .svelte-kit/
 coverage/
+# Playwright output (apps/webmail)
+test-results/
+playwright-report/
 
 # Logs and OS noise
 *.log

@@ -39,7 +39,7 @@ Sem o Service Token (ou com um falso), o Access barra o pedido antes do Worker c
    - `exp` e `nbf` com no máximo 60 s de tolerância de relógio;
    - `common_name` igual ao Client ID esperado.
 2. **Bearer** do grupo da rota, comparado em tempo constante.
-3. **Usuário** (só no grupo "usuário"): `X-Webmail-User` é um UUID de um usuário existente e ativo.
+3. **Usuário** (só no grupo "usuário"): `X-Webmail-User` é um UUID de um usuário existente, ativo e **com senha e 2FA configurados**. Depois de um reset, até a nova configuração, todas as rotas desse grupo respondem `401`.
 4. **Rate limit:** 100 pedidos por minuto por chave (aproximado, por local da Cloudflare).
 
 As falhas de 1 a 3 respondem `401 {"error":"unauthorized"}`, sem dizer qual passo falhou. Se faltar qualquer configuração (`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `ACCESS_CLIENT_ID`, `INTERNAL_API_TOKEN`, `ADMIN_API_TOKEN`), os pedidos do grupo afetado respondem 401: a API fecha, não abre.
@@ -235,10 +235,12 @@ No máximo 50 resultados, do mais novo para o mais antigo. A comparação ignora
 
 ### `GET /v1/me` (grupo usuário)
 
-O usuário do `X-Webmail-User`. O webmail usa para revalidar a sessão (no máximo a cada 5 minutos). Usuário desativado ou apagado: `401`, e o webmail apaga a sessão.
+O usuário do `X-Webmail-User`. O webmail usa para revalidar a sessão (no máximo a cada 5 minutos). Usuário desativado, apagado ou resetado e ainda não configurado: `401`, e o webmail apaga a sessão.
+
+Resposta: `{"id","username","displayName","role","updatedAt"}`. `updatedAt` é a última mudança do usuário (ISO 8601 UTC; reset, configuração e `PATCH` atualizam; pode ser `null` em usuário antigo nunca alterado). O webmail apaga toda sessão criada antes dele.
 
 ```json
-{ "id": "uuid", "username": "danielcraft221", "displayName": "Daniel", "role": "admin" }
+{ "id": "uuid", "username": "danielcraft221", "displayName": "Daniel", "role": "admin", "updatedAt": "2026-11-01T12:00:00.000Z" }
 ```
 
 ## Rotas de autenticação (grupo serviço, Etapa 5)
