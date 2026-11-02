@@ -14,7 +14,7 @@ Produção do webmail numa VPS própria (`survivus-vps01`, OVHcloud BHS); o serv
 | 4 | Etapa 7: primeiro deploy, só leitura. Imagem montada pela CI e publicada no GHCR; Daniel faz o pull na VPS por digest. cloudflared com `--protocol http2`, limites para 4 GB, cookie `__Host-` testado no Chrome com HTTPS real | CI + VPS |
 | 5 | Etapas 8 a 12, cada uma com um deploy pequeno | casa + VPS |
 
-## Etapa atual: 5 (em andamento: PR 3 mergeado; deploy do Worker e tarefa 8)
+## Etapa atual: 5 (em andamento: falta o PR do kit 3.1.1 e a validação)
 
 ### Próximo passo
 
@@ -28,8 +28,13 @@ Regras até a atualização:
 Depois do merge, **nesta ordem** (o PR 3 muda o Worker: 401 para usuário sem senha ou 2FA e `updatedAt` no `GET /v1/me`; sem migração):
 1. ✅ Deploy do Worker da `main` limpa (`3343ad6`), em 2026-11-02, na forma protegida (`main` limpa, `--frozen-lockfile`, versão no ar conferida). Versão anterior: `4ff110af-0455-4efa-b587-389197cb89ae`. Versão nova: `29526180-d7e8-4563-b36e-113ecd0f10c7`. Rollback: `pnpm exec wrangler rollback 4ff110af-0455-4efa-b587-389197cb89ae`.
 2. ✅ `scripts/smoke-api.sh`: Access e Worker `401` sem credenciais, como esperado; `GET /v1/mailboxes` com o `SMOKE_USER_ID` deu `401`, também esperado (o `danielcraft221` ainda não tem senha). O script para no primeiro FAIL, então as seções 7 e 8 rodaram numa cópia temporária sem as checagens do usuário: separação dos tokens e `workers.dev` desligado, 11 PASS.
-3. Tarefa 8 (conta real), com o "ok" de Daniel antes do `user:reset danielcraft221` (mexe no D1 de produção).
-4. `scripts/smoke-api.sh` de novo: tudo PASS.
+3. ✅ Tarefa 8 (conta real), 2026-11-02. Daniel rodou o `user:reset danielcraft221` no próprio terminal (o link não passou pelo chat), configurou senha e 2FA pelo link no `pnpm dev` (`127.0.0.1:5173`, túnel do Termius) e testou: login certo, código errado (`bad_code`), código repetido (`code_reused`), usuário inexistente (`unknown_user`, sem gravar o nome digitado) e logout. O `audit:list` mostra tudo, sem segredos.
+4. ✅ `scripts/smoke-api.sh` completo: 20 PASS, nenhum FAIL.
+5. ✅ Recebimento depois do deploy: e-mail de teste da conta do IFMS para `contato@survivus.com.br`, recebido às 2026-11-02T12:04:54Z (`inbox:list`: `parse_status` `ok`, `spf`, `dkim` e `dmarc` `pass`).
+
+Falta para fechar a Etapa 5:
+1. **Em 2026-11-06:** o PR obrigatório do kit 3.1.1 / adapter 6.0.1 (acima).
+2. "Ao terminar" da `docs/etapas/etapa-5.md`: mostrar como Daniel testa cada critério de pronto (incluindo `ss -tlnp` com o `pnpm dev` no ar e o `webmail.env` sem `ADMIN_API_TOKEN`), listar as dependências com licença, dizer o que ficou pendente. Esperar a validação de Daniel. Não começar a Etapa 6 antes.
 
 ## Etapa 5: em andamento
 
