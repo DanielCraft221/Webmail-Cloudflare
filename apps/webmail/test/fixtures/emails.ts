@@ -71,6 +71,12 @@ export const LARGE_HTML = `<html><body>${"<p>linha de newsletter grande</p>".rep
 /** Just under 1 MB, with styles: slow enough (over a second) to hold a worker during the 503 test. */
 export const SLOW_HTML = `<html><body><table>${'<tr><td style="padding:4px;color:#333"><b>x</b> <a href="https://a.example/">a</a></td></tr>'.repeat(10_500)}</table></body></html>`;
 
+/**
+ * 200,000 nested <div> (about 1 MB, under the limit): jsdom and DOMPurify take over a minute on
+ * it, so the worker hits the real 10 s timeout and must be terminated. No test-only setting.
+ */
+export const HANG_HTML = "<div>".repeat(200_000);
+
 /** Fixed ids of the fake Worker's messages (test/fake-worker.ts). Mailbox 1 is readable by every user; mailbox 2 by none. */
 export const MSG = {
   malicious: "00000000-0000-4000-8000-000000000001",
@@ -79,6 +85,7 @@ export const MSG = {
   slow: "00000000-0000-4000-8000-000000000004",
   otherMailbox: "00000000-0000-4000-8000-000000000005",
   unparsed: "00000000-0000-4000-8000-000000000006",
+  hang: "00000000-0000-4000-8000-000000000007",
   missing: "00000000-0000-4000-8000-0000000000ff",
   htmlAttachment: "00000000-0000-4000-8000-0000000000a1",
   trickyName: "00000000-0000-4000-8000-0000000000a2",

@@ -13,6 +13,7 @@ import { api } from "@webmail/shared";
 import type { z } from "zod";
 import { FAKE } from "./fake-tokens.ts";
 import {
+  HANG_HTML,
   HTML_ATTACHMENT,
   LARGE_HTML,
   MALICIOUS_HTML,
@@ -143,6 +144,7 @@ export function createStore(): Store {
         html: "<p>outra caixa</p>",
       }),
       message(MSG.unparsed, 1, null),
+      message(MSG.hang, 1, { text: null, html: HANG_HTML }),
     ]),
   };
 }

@@ -1,4 +1,8 @@
+import { execFileSync } from "node:child_process";
+import { readdirSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 import { expect, test } from "@playwright/test";
+import { APP_PORT } from "../../playwright.config.ts";
 import {
   HTML_ATTACHMENT,
   MSG,
@@ -14,6 +18,16 @@ const NOT_FOUND = "Mensagem não encontrada";
 const BODY_CSP =
   "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox; frame-ancestors 'self'; base-uri 'none'; form-action 'none'";
 const body = (id: string) => `/mensagens/${id}/corpo`;
+
+/** OS threads of the app built and started by Playwright (Linux): one per live worker, and more. */
+function appThreads(): number {
+  const out = execFileSync("ss", ["-Hltnp", `sport = :${APP_PORT}`], {
+    encoding: "utf8",
+  });
+  const pid = /pid=(\d+)/.exec(out)?.[1];
+  if (!pid) throw new Error(`no process listening on ${APP_PORT}: ${out}`);
+  return readdirSync(`/proc/${pid}/task`).length;
+}
 
 test.describe("reading", () => {
   let session: Awaited<ReturnType<typeof loggedIn>>;
@@ -162,10 +176,45 @@ test.describe("reading", () => {
     expect(new Set(answers).size).toBe(4);
   });
 
+  // Against the build: if the sanitizer ever ran on the main thread (a broken dynamic import,
+  // a synchronous fallback), the three requests would be served one after the other: no 503.
   test("a third sanitization at the same time gets 503", async () => {
     const statuses = await Promise.all(
       [1, 2, 3].map(() => open(body(MSG.slow)).then((r) => r.status())),
     );
     expect(statuses.sort()).toEqual([200, 200, 503]);
+  });
+
+  test("a hung worker is terminated at the 10 s timeout, never reused, and never blocks the server", async ({
+    request,
+  }) => {
+    test.setTimeout(60_000);
+    // A worker already running in the first slot, the one the next request takes.
+    expect((await open(body(MSG.textOnly))).status()).toBe(200);
+    await open(body(MSG.malicious));
+    const started = Date.now();
+    const hung = open(body(MSG.hang)).then(async (r) => ({
+      status: r.status(),
+      html: await r.text(),
+      at: Date.now(),
+    }));
+    await sleep(1_000);
+    const during = appThreads();
+    // The main thread still answers while the worker is stuck (off-main-thread proof).
+    const login = await get(request, "/login", session.ip);
+    const loginAt = Date.now();
+    expect(login.status()).toBe(200);
+    const result = await hung;
+    expect(loginAt).toBeLessThan(result.at);
+    expect(result.at - started).toBeGreaterThanOrEqual(9_000);
+    expect(result.status).toBe(200);
+    expect(result.html).toContain("Não foi possível exibir");
+    // terminate(), not just forgotten: the stuck thread is gone.
+    await sleep(500);
+    expect(appThreads()).toBeLessThan(during);
+    // The next message gets a fresh worker and is sanitized normally.
+    const next = await (await open(body(MSG.malicious))).text();
+    expect(next).toContain("Olá, esta é uma mensagem de teste.");
+    expect(next).not.toMatch(/<script|onerror/i);
   });
 });
