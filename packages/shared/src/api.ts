@@ -190,3 +190,49 @@ export const auditEvent = z.object({
   detail: z.record(z.string(), z.unknown()).nullable(),
 });
 export const auditListResponse = z.object({ events: z.array(auditEvent) });
+
+// --- Reading (Etapa 6) ---
+
+// Lenient where postal-mime can leave a field out: one odd header must not hide the message.
+const address = z.object({
+  address: z.string().default(""),
+  name: z.string().nullable().default(null),
+});
+const authResult = z.string();
+/** MessageSummary of docs/api.md. */
+export const messageSummary = z.object({
+  id: messageId,
+  mailboxId: z.number().int().positive(),
+  folder,
+  from: address.nullable(),
+  subject: z.string().nullable(),
+  snippet: z.string().nullable(),
+  date: z.string().nullable(),
+  receivedAt: z.string(),
+  size: z.number().int().nonnegative(),
+  hasAttachments: z.boolean(),
+  isRead: z.boolean(),
+  auth: z.object({ spf: authResult, dkim: authResult, dmarc: authResult }),
+  parseStatus: z.enum(["ok", "failed"]),
+});
+/** GET /v1/messages/:id. `body.html` is raw: the webmail sanitizes it before showing it. */
+export const messageDetail = messageSummary.extend({
+  to: z.array(address),
+  cc: z.array(address),
+  messageId: z.string().nullable().catch(null),
+  inReplyTo: z.string().nullable().catch(null),
+  references: z.string().nullable().catch(null),
+  body: z
+    .object({ text: z.string().nullable(), html: z.string().nullable() })
+    .nullable(),
+  attachments: z.array(
+    z.object({
+      id: messageId,
+      filename: z.string().nullable(),
+      contentType: z.string().nullable(),
+      size: z.number().int().nonnegative(),
+      isInline: z.boolean(),
+      contentId: z.string().nullable(),
+    }),
+  ),
+});

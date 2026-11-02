@@ -35,16 +35,38 @@ const SECURITY_HEADERS: Record<string, string> = {
 const FALLBACK_CSP =
   "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
+/**
+ * The only route that may be framed, and only by our own pages: the email body, inside the
+ * sandboxed iframe (docs/webmail-leitura.md). Its CSP is layer 2: even if DOMPurify lets
+ * something through, nothing external loads and no script runs, also when opened directly.
+ */
+const BODY_ROUTE = "/mensagens/[id]/corpo";
+const BODY_CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox; frame-ancestors 'self'; base-uri 'none'; form-action 'none'";
+const BODY_HEADERS: Record<string, string> = {
+  ...SECURITY_HEADERS,
+  "X-Frame-Options": "SAMEORIGIN",
+  // No forms here, so no Origin to keep: nothing about the reader goes to a link's site.
+  "Referrer-Policy": "no-referrer",
+  "Content-Security-Policy": BODY_CSP,
+};
+
 function secure(
   response: Response,
   production: boolean,
   pathname: string,
+  routeId: string | null = null,
 ): Response {
-  for (const [name, value] of Object.entries(SECURITY_HEADERS))
+  const headers = routeId === BODY_ROUTE ? BODY_HEADERS : SECURITY_HEADERS;
+  for (const [name, value] of Object.entries(headers))
     response.headers.set(name, value);
   if (!response.headers.has("Content-Security-Policy"))
     response.headers.set("Content-Security-Policy", FALLBACK_CSP);
-  if (!pathname.startsWith("/_app/immutable/"))
+  // Downloads send "private, no-store" themselves; everything else gets no-store.
+  if (
+    !pathname.startsWith("/_app/immutable/") &&
+    !/\bno-store\b/.test(response.headers.get("Cache-Control") ?? "")
+  )
     response.headers.set("Cache-Control", "no-store");
   if (production)
     response.headers.set(
@@ -114,7 +136,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
   }
 
-  return secure(await resolve(event), config.production, path);
+  return secure(await resolve(event), config.production, path, event.route.id);
 };
 
 /** Unexpected errors: only their kind goes to the log, never the message (it could carry input). */

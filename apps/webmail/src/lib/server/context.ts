@@ -4,6 +4,7 @@ import { dev } from "$app/env";
 import { type Config, loadConfig } from "./config.ts";
 import { openDb } from "./db.ts";
 import { hashPassword } from "./password.ts";
+import { createSanitizePool, type SanitizePool } from "./sanitize-pool.ts";
 import { type WebmailApi, webmailApi } from "./worker-api.ts";
 
 export interface AppContext {
@@ -11,6 +12,7 @@ export interface AppContext {
   db: DatabaseSync;
   api: WebmailApi;
   dummyHash: string;
+  sanitizer: SanitizePool;
 }
 
 let context: AppContext | undefined;
@@ -25,6 +27,7 @@ export async function initContext(): Promise<AppContext> {
     db: openDb(),
     api: webmailApi(config.api),
     dummyHash: await hashPassword(randomBytes(32).toString("base64")),
+    sanitizer: createSanitizePool(),
   };
   return context;
 }

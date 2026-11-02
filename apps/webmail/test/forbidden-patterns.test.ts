@@ -71,6 +71,30 @@ const rules: { name: string; why: string; offenders: () => string[] }[] = [
     offenders: () =>
       code.filter((p) => /resolution\s*:\s*["']server["']/.test(read(p))),
   },
+  {
+    name: "risky DOMPurify options",
+    // docs/webmail-leitura.md: nearly every DOMPurify advisory since 2024 sits in one of these.
+    why: "the source of most DOMPurify bypasses (IN_PLACE, SAFE_FOR_TEMPLATES, ...)",
+    offenders: () =>
+      code.filter((p) =>
+        /\b(IN_PLACE|SAFE_FOR_TEMPLATES|CUSTOM_ELEMENT_HANDLING|RETURN_DOM|RETURN_DOM_FRAGMENT|RETURN_TRUSTED_TYPE|PARSER_MEDIA_TYPE|ADD_TAGS|ADD_ATTR|ADD_URI_SAFE_ATTR|USE_PROFILES|setConfig)\b/.test(
+          read(p),
+        ),
+      ),
+  },
+  {
+    name: "jsdom that runs scripts or loads resources",
+    // jsdom's README: its sandbox "is not foolproof"; it only parses here, DOMPurify decides.
+    why: "untrusted email code would run inside the server",
+    offenders: () =>
+      code.filter((p) => /\b(runScripts|resources)\s*:/.test(read(p))),
+  },
+  {
+    name: "srcdoc",
+    // An iframe srcdoc inherits the page's CSP and origin: the body has its own route.
+    why: "the email would share the webmail's origin and CSP",
+    offenders: () => code.filter((p) => /\bsrcdoc\b/i.test(read(p))),
+  },
 ];
 
 describe("forbidden patterns in apps/webmail", () => {

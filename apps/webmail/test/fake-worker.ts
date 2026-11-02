@@ -1,6 +1,6 @@
 /**
- * Fake mail-core for the webmail tests: the auth, audit and admin routes of docs/api.md, with
- * the same token groups and the shared zod schemas. Never the real API, never real secrets.
+ * Fake mail-core for the webmail tests: the auth, audit, admin and reading routes of docs/api.md,
+ * with the same token groups and the shared zod schemas. Never the real API, never real secrets.
  * Run alone with `node test/fake-worker.ts` (PORT, default 8790).
  */
 import { randomUUID } from "node:crypto";
@@ -12,6 +12,14 @@ import {
 import { api } from "@webmail/shared";
 import type { z } from "zod";
 import { FAKE } from "./fake-tokens.ts";
+import {
+  HTML_ATTACHMENT,
+  LARGE_HTML,
+  MALICIOUS_HTML,
+  MSG,
+  SLOW_HTML,
+  TRICKY_NAME,
+} from "./fixtures/emails.ts";
 
 export { FAKE };
 
@@ -29,15 +37,126 @@ interface User {
   updatedAt: string | null;
 }
 
+type Detail = z.infer<typeof api.messageDetail>;
+interface Message {
+  detail: Detail;
+  files: Map<string, string>;
+  raw: string;
+}
+
 export interface Store {
   users: Map<string, User>;
   audit: z.infer<typeof api.auditEvent>[];
+  messages: Map<string, Message>;
 }
 
 const DAY = 86_400_000;
+/** Every active user reads mailbox 1; nobody reads mailbox 2 (the real Worker answers 404 for it). */
+const READABLE_MAILBOX = 1;
+
+function message(
+  id: string,
+  mailboxId: number,
+  body: Detail["body"],
+  attachments: {
+    id: string;
+    filename: string | null;
+    contentType: string;
+    content: string;
+  }[] = [],
+): [string, Message] {
+  const detail = api.messageDetail.parse({
+    id,
+    mailboxId,
+    folder: "inbox",
+    from: { address: "remetente@example.com", name: "Remetente" },
+    subject: `Mensagem ${id.slice(-2)}`,
+    snippet: null,
+    date: "Mon, 2 Nov 2026 10:00:00 -0300",
+    receivedAt: "2026-11-02T13:00:00.000Z",
+    size: 1000,
+    hasAttachments: attachments.length > 0,
+    isRead: false,
+    auth: { spf: "pass", dkim: "pass", dmarc: "pass" },
+    parseStatus: body ? "ok" : "failed",
+    to: [{ address: "contato@survivus.com.br", name: "" }],
+    cc: [],
+    messageId: null,
+    inReplyTo: null,
+    references: null,
+    body,
+    attachments: attachments.map(({ content, ...a }) => ({
+      ...a,
+      size: Buffer.byteLength(content),
+      isInline: false,
+      contentId: null,
+    })),
+  });
+  return [
+    id,
+    {
+      detail,
+      files: new Map(attachments.map((a) => [a.id, a.content])),
+      raw: `Subject: ${detail.subject}\r\n\r\n${body?.text ?? ""}`,
+    },
+  ];
+}
 
 export function createStore(): Store {
-  return { users: new Map(), audit: [] };
+  return {
+    users: new Map(),
+    audit: [],
+    messages: new Map([
+      message(
+        MSG.malicious,
+        1,
+        {
+          text: "Versão em texto da mensagem maliciosa.",
+          html: MALICIOUS_HTML,
+        },
+        [
+          {
+            id: MSG.htmlAttachment,
+            filename: "pagina.html",
+            contentType: "text/html",
+            content: HTML_ATTACHMENT,
+          },
+          {
+            id: MSG.trickyName,
+            filename: TRICKY_NAME,
+            contentType: "text/html",
+            content: "x",
+          },
+        ],
+      ),
+      message(MSG.textOnly, 1, { text: "linha 1\n<b>linha 2</b>", html: null }),
+      message(MSG.large, 1, {
+        text: "Texto da mensagem grande.",
+        html: LARGE_HTML,
+      }),
+      message(MSG.slow, 1, {
+        text: "Texto da mensagem lenta.",
+        html: SLOW_HTML,
+      }),
+      message(MSG.otherMailbox, 2, {
+        text: "De outra caixa.",
+        html: "<p>outra caixa</p>",
+      }),
+      message(MSG.unparsed, 1, null),
+    ]),
+  };
+}
+
+function sendFile(res: ServerResponse, content: string, filename: string) {
+  // Like the real Worker (docs/api.md); the webmail must build its own headers anyway.
+  res.writeHead(200, {
+    "Content-Type": "application/octet-stream",
+    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Content-Length": String(Buffer.byteLength(content)),
+    "Cache-Control": "private, no-store",
+    "X-Fake-Worker-Header": "must-not-reach-the-browser",
+  });
+  res.end(content);
 }
 
 function adminUser(u: User) {
@@ -102,6 +221,17 @@ export function handler(store: Store) {
     const fail = (status: number) =>
       send(res, status, { error: ERRORS[status] });
     if (path === "/health") return send(res, 200, { ok: true });
+    // Test-only, outside the API: the link the browser test opens shows the Referer it got.
+    if (path === "/__echo/referer") {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      return res.end(`referer=${req.headers.referer ?? "(none)"}`);
+    }
+    // Test-only: whether a message was marked as read (no GET may do it).
+    const probe = /^\/__test\/messages\/([^/]+)$/.exec(path);
+    if (probe) {
+      const m = store.messages.get(probe[1] ?? "");
+      return m ? send(res, 200, { isRead: m.detail.isRead }) : fail(404);
+    }
 
     // Access in front, then the bearer of the route's group (docs/api.md).
     if (
@@ -146,6 +276,25 @@ export function handler(store: Store) {
           role: user.role,
           updatedAt: user.updatedAt,
         });
+      const read =
+        /^\/v1\/messages\/([^/]+)(?:\/(raw)|\/attachments\/([^/]+))?$/.exec(
+          path,
+        );
+      const m = read ? store.messages.get(read[1] ?? "") : undefined;
+      if (
+        method === "GET" &&
+        read &&
+        m?.detail.mailboxId === READABLE_MAILBOX
+      ) {
+        if (read[2]) return sendFile(res, m.raw, `${m.detail.id}.eml`);
+        if (read[3]) {
+          const content = m.files.get(read[3]);
+          return content === undefined
+            ? fail(404)
+            : sendFile(res, content, "anexo");
+        }
+        return send(res, 200, m.detail);
+      }
       return fail(404);
     }
 

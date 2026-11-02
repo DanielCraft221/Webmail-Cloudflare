@@ -215,3 +215,25 @@ export function sessionCookie(setCookie: string | undefined): string {
   remember(match[1]);
   return `__Host-webmail_session=${match[1]}`;
 }
+
+/** A ready user logged in from a fresh IP: the session cookie and that IP. */
+export async function loggedIn(request: APIRequestContext, username: string) {
+  const user = await readyUser(request, username);
+  const ip = freshIp();
+  const code = totp(user.secret, 1);
+  remember(code);
+  const login = await post(
+    request,
+    "/login",
+    { username: user.username, password: user.password, code },
+    ip,
+  );
+  if (login.status() !== 303) throw new Error(`login ${login.status()}`);
+  return { ...user, ip, cookie: sessionCookie(login.headers()["set-cookie"]) };
+}
+
+/** Whether the fake Worker has the message marked as read (test-only route). */
+export async function isRead(request: APIRequestContext, id: string) {
+  const res = await request.get(`${API}/__test/messages/${id}`);
+  return ((await res.json()) as { isRead: boolean }).isRead;
+}

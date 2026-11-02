@@ -26,6 +26,16 @@ export function checkApiUrl(value: string | undefined): string {
   return url.origin;
 }
 
+function headersFor(cfg: ApiConfig, user?: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    "CF-Access-Client-Id": cfg.accessClientId,
+    "CF-Access-Client-Secret": cfg.accessClientSecret,
+    Authorization: `Bearer ${cfg.bearer}`,
+  };
+  if (user) headers["X-Webmail-User"] = user;
+  return headers;
+}
+
 export async function call<T extends z.ZodType>(
   cfg: ApiConfig,
   method: string,
@@ -37,12 +47,7 @@ export async function call<T extends z.ZodType>(
     okStatus?: number;
   } = {},
 ): Promise<{ status: number; data: z.infer<T> | null }> {
-  const headers: Record<string, string> = {
-    "CF-Access-Client-Id": cfg.accessClientId,
-    "CF-Access-Client-Secret": cfg.accessClientSecret,
-    Authorization: `Bearer ${cfg.bearer}`,
-  };
-  if (options.user) headers["X-Webmail-User"] = options.user;
+  const headers = headersFor(cfg, options.user);
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(`${cfg.apiUrl}${path}`, {
     method,
@@ -65,6 +70,32 @@ export async function call<T extends z.ZodType>(
   }
   // Every answer is checked against the shared schema; nothing raw goes back to the browser.
   return { status: res.status, data: options.schema.parse(await res.json()) };
+}
+
+/**
+ * A download (attachment or .eml) as the Worker sends it, or null on 404/401. The caller builds
+ * its own response from the body and never passes these headers on. 10 minutes for the whole
+ * transfer: an 18 MB attachment does not fit in the 10 s of the JSON calls.
+ */
+export async function download(
+  cfg: ApiConfig,
+  path: string,
+  user: string,
+): Promise<Response | null> {
+  const res = await fetch(`${cfg.apiUrl}${path}`, {
+    headers: headersFor(cfg, user),
+    redirect: "error",
+    signal: AbortSignal.timeout(600_000),
+  });
+  if (res.status === 404 || res.status === 401) {
+    await res.body?.cancel();
+    return null;
+  }
+  if (res.status !== 200 || !res.body) {
+    await res.body?.cancel();
+    throw new ApiError(res.status);
+  }
+  return res;
 }
 
 /** Calls the webmail makes with the internal token. */
@@ -102,6 +133,29 @@ export function webmailApi(cfg: ApiConfig) {
           schema: api.meResponse,
         })
       ).data;
+    },
+    /** null: not found or not readable by this user (the Worker decides; the two look the same). */
+    async message(userId: string, id: string) {
+      return (
+        await call(cfg, "GET", `/v1/messages/${encodeURIComponent(id)}`, {
+          user: userId,
+          schema: api.messageDetail,
+        })
+      ).data;
+    },
+    attachment(userId: string, id: string, attId: string) {
+      return download(
+        cfg,
+        `/v1/messages/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attId)}`,
+        userId,
+      );
+    },
+    raw(userId: string, id: string) {
+      return download(
+        cfg,
+        `/v1/messages/${encodeURIComponent(id)}/raw`,
+        userId,
+      );
     },
     async audit(body: z.infer<typeof api.webmailAuditBody>) {
       await call(cfg, "POST", "/v1/audit", {
