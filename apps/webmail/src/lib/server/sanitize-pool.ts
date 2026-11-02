@@ -1,4 +1,5 @@
 import { type ResourceLimits, Worker } from "node:worker_threads";
+import { log } from "./log.ts";
 import type { Sanitized } from "./sanitize.ts";
 
 /** Above this, the HTML is not sanitized: the page shows the text and the .eml button (docs/webmail-leitura.md). */
@@ -6,14 +7,14 @@ export const MAX_HTML_BYTES = 1024 * 1024;
 
 export type SanitizeResult =
   | ({ ok: true } & Sanitized)
-  | { ok: false; reason: "too_large" | "busy" | "failed" };
+  | { ok: false; reason: "too_large" | "busy" | "failed" | "unavailable" };
 
 interface Options {
   size?: number;
   timeoutMs?: number;
   resourceLimits?: ResourceLimits;
-  /** Tests only: a probe worker instead of sanitize.ts. */
-  file?: URL;
+  /** Tests only: where the worker file comes from (a probe worker, or a failing load). */
+  load?: () => Promise<URL>;
 }
 
 /**
@@ -24,16 +25,20 @@ interface Options {
 export function createSanitizePool({
   size = 2,
   timeoutMs = 10_000,
-  // Measured: 1 MB of HTML needs about 350 MiB (docs/webmail-leitura.md).
+  // Measured: two workers at this limit take the process to about 1.4 GiB of RSS; the
+  // container limit (2 GiB) sits above that, so a worker dies before the container does
+  // (docs/webmail-leitura.md, "Memória real").
   resourceLimits = { maxOldGenerationSizeMb: 512 },
-  file,
-}: Options = {}) {
   // Dynamic import: the build puts sanitize.ts in its own chunk, which the worker then runs.
+  load = () => import("./sanitize.ts").then((m) => new URL(m.WORKER_URL)),
+}: Options = {}) {
   let workerFile: Promise<URL> | undefined;
   const resolveFile = () => {
-    workerFile ??= file
-      ? Promise.resolve(file)
-      : import("./sanitize.ts").then((m) => new URL(m.WORKER_URL));
+    // A failed load is not kept: the next request tries again.
+    workerFile ??= load().catch((err: unknown) => {
+      workerFile = undefined;
+      throw err;
+    });
     return workerFile;
   };
   type Slot = { worker: Worker | null; busy: boolean };
@@ -66,8 +71,10 @@ export function createSanitizePool({
       try {
         worker = slot.worker ??= spawn(slot, await resolveFile());
       } catch {
+        // Nothing about the message or the error: the error text could carry file paths.
+        log("error", "sanitizer_unavailable");
         slot.busy = false;
-        return { ok: false, reason: "failed" };
+        return { ok: false, reason: "unavailable" };
       }
       return new Promise((resolve) => {
         const finish = (result: SanitizeResult, replace: boolean) => {

@@ -26,6 +26,8 @@ const SECURITY_HEADERS: Record<string, string> = {
   // and the CSRF check refuses the login. same-origin still sends nothing to other sites.
   "Referrer-Policy": "same-origin",
   "X-Content-Type-Options": "nosniff",
+  // Hostnames in an email (links, blocked images) must not be resolved just by opening it.
+  "X-DNS-Prefetch-Control": "off",
   "X-Frame-Options": "DENY",
   "Cross-Origin-Opener-Policy": "same-origin",
   "Permissions-Policy":

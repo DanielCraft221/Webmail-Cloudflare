@@ -1,13 +1,14 @@
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import {
   createSanitizePool,
   MAX_HTML_BYTES,
 } from "../src/lib/server/sanitize-pool.ts";
 import { MALICIOUS_HTML } from "./fixtures/emails.ts";
 
-const probe = new URL("./fixtures/probe-worker.ts", import.meta.url);
+const probeFile = new URL("./fixtures/probe-worker.ts", import.meta.url);
+const probe = async () => probeFile;
 const html = async (
   p: Promise<{ ok: boolean; html?: string; reason?: string }>,
 ) => {
@@ -23,19 +24,19 @@ describe("sanitize pool", () => {
   });
 
   it("starts each worker with an empty environment", async () => {
-    const pool = createSanitizePool({ file: probe });
+    const pool = createSanitizePool({ load: probe });
     expect(Object.keys(process.env).length).toBeGreaterThan(1);
     expect(await html(pool.run("env"))).toBe("[]");
   });
 
   it("reuses a healthy worker", async () => {
-    const pool = createSanitizePool({ size: 1, file: probe });
+    const pool = createSanitizePool({ size: 1, load: probe });
     const first = await html(pool.run("id"));
     expect(await html(pool.run("id"))).toBe(first);
   });
 
   it("terminates a worker that hangs and never reuses it", async () => {
-    const pool = createSanitizePool({ size: 1, timeoutMs: 300, file: probe });
+    const pool = createSanitizePool({ size: 1, timeoutMs: 300, load: probe });
     const first = await html(pool.run("id"));
     // OS threads of this process (Linux): the hung thread must really stop, not just be forgotten.
     const threads = () => readdirSync("/proc/self/task").length;
@@ -53,7 +54,7 @@ describe("sanitize pool", () => {
       size: 1,
       timeoutMs: 20_000,
       resourceLimits: { maxOldGenerationSizeMb: 32 },
-      file: probe,
+      load: probe,
     });
     const first = await html(pool.run("id"));
     expect(await html(pool.run("oom"))).toBe("failed");
@@ -61,7 +62,7 @@ describe("sanitize pool", () => {
   });
 
   it("answers busy when every worker is taken", async () => {
-    const pool = createSanitizePool({ size: 2, timeoutMs: 500, file: probe });
+    const pool = createSanitizePool({ size: 2, timeoutMs: 500, load: probe });
     const a = pool.run("hang");
     const b = pool.run("hang");
     expect(await pool.run("id")).toEqual({ ok: false, reason: "busy" });
@@ -71,12 +72,67 @@ describe("sanitize pool", () => {
   });
 
   it("refuses HTML above 1 MB without starting a worker", async () => {
-    const pool = createSanitizePool({ file: probe });
+    const pool = createSanitizePool({ load: probe });
     expect(await pool.run("x".repeat(MAX_HTML_BYTES + 1))).toEqual({
       ok: false,
       reason: "too_large",
     });
   });
+
+  it("logs sanitizer_unavailable without details and tries the load again next time", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    let loads = 0;
+    const pool = createSanitizePool({
+      size: 1,
+      load: async () => {
+        loads++;
+        if (loads === 1) throw new Error("/secret/path/sanitize.js not found");
+        return probeFile;
+      },
+    });
+    expect(await pool.run("<p>mensagem</p>")).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+    expect(errors).toHaveBeenCalledTimes(1);
+    const line = JSON.parse(String(errors.mock.calls[0]?.[0]));
+    expect(Object.keys(line).sort()).toEqual(["event", "level", "time"]);
+    expect(line).toMatchObject({
+      level: "error",
+      event: "sanitizer_unavailable",
+    });
+    // The rejected load was not kept: the next request loads again and works.
+    expect(await html(pool.run("id"))).toMatch(/^\d+$/);
+    expect(loads).toBe(2);
+    errors.mockRestore();
+  });
+
+  // Two workers at the heap limit at once (docs/webmail-leitura.md, "Memória real"): each one
+  // must die by itself, well before the process reaches the container limit (2 GiB).
+  it("two workers blowing the heap at once stay under the memory budget", async () => {
+    const rssMiB = () =>
+      Number(
+        /VmRSS:\s+(\d+)/.exec(readFileSync("/proc/self/status", "utf8"))?.[1],
+      ) / 1024;
+    const pool = createSanitizePool();
+    await Promise.all([pool.run("<p>a</p>"), pool.run("<p>b</p>")]);
+    const before = rssMiB();
+    let peak = before;
+    const sampler = setInterval(() => {
+      peak = Math.max(peak, rssMiB());
+    }, 20);
+    // 240,000 <br> (938 KB, under the 1 MB limit): measured to blow the 512 MB heap in ~6 s.
+    const bomb = "<br>".repeat(240_000);
+    const results = await Promise.all([pool.run(bomb), pool.run(bomb)]);
+    clearInterval(sampler);
+    expect(results).toEqual([
+      { ok: false, reason: "failed" },
+      { ok: false, reason: "failed" },
+    ]);
+    // Measured: about +1000 MiB for both. 1200 leaves room for runner noise and stays far
+    // below 2 GiB minus the server itself.
+    expect(peak - before).toBeLessThan(1200);
+  }, 60_000);
 
   it("runs the real sanitizer in a worker", async () => {
     const pool = createSanitizePool();

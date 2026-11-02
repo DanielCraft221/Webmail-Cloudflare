@@ -59,6 +59,7 @@ for (const path of pages) {
     const h = res.headers();
     expect(h["referrer-policy"]).toBe("same-origin");
     expect(h["x-content-type-options"]).toBe("nosniff");
+    expect(h["x-dns-prefetch-control"]).toBe("off");
     expect(h["x-frame-options"]).toBe("DENY");
     expect(h["permissions-policy"]).toContain("camera=()");
     expect(h["cache-control"]).toBe("no-store");
@@ -85,6 +86,7 @@ test("the 400 for a missing IP also carries the headers", async ({
   const h = (await request.get(`${BASE}/login`)).headers();
   expect(h["content-security-policy"]).toContain("default-src 'none'");
   expect(h["x-content-type-options"]).toBe("nosniff");
+  expect(h["x-dns-prefetch-control"]).toBe("off");
   expect(h["referrer-policy"]).toBe("same-origin");
 });
 

@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-/** Local SQLite: only disposable data (sessions, limits, bans). Users live in D1. */
+/** Local SQLite: only disposable data (sessions, limits, bans, failed sanitizations). Users live in D1. */
 export function defaultDbPath(): string {
   return (
     process.env.WEBMAIL_DB_PATH ||
@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS setup_pending (
   secret TEXT NOT NULL,
   expires_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS sanitize_failed (message_id TEXT PRIMARY KEY, until INTEGER NOT NULL);
 `;
 
 export function openDb(path = defaultDbPath()): DatabaseSync {

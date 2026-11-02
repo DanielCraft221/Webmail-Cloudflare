@@ -46,6 +46,7 @@ test.describe("reading", () => {
     expect(h["x-frame-options"]).toBe("SAMEORIGIN");
     expect(h["referrer-policy"]).toBe("no-referrer");
     expect(h["x-content-type-options"]).toBe("nosniff");
+    expect(h["x-dns-prefetch-control"]).toBe("off");
     expect(h["cache-control"]).toBe("no-store");
     expect(h["content-type"]).toBe("text/html; charset=utf-8");
     const html = await res.text();
@@ -130,6 +131,7 @@ test.describe("reading", () => {
       `attachment; filename="pagina.html"; filename*=UTF-8''pagina.html`,
     );
     expect(h["x-content-type-options"]).toBe("nosniff");
+    expect(h["x-dns-prefetch-control"]).toBe("off");
     expect(h["cache-control"]).toBe("private, no-store");
     expect(h["x-fake-worker-header"]).toBeUndefined();
     expect(await res.text()).toBe(HTML_ATTACHMENT);
@@ -216,5 +218,10 @@ test.describe("reading", () => {
     const next = await (await open(body(MSG.malicious))).text();
     expect(next).toContain("Olá, esta é uma mensagem de teste.");
     expect(next).not.toMatch(/<script|onerror/i);
+    // Remembered for 6 hours: reopening it answers at once with the text, without a worker.
+    const reopenedAt = Date.now();
+    const reopened = await open(body(MSG.hang));
+    expect(Date.now() - reopenedAt).toBeLessThan(2_000);
+    expect(await reopened.text()).toContain("Não foi possível exibir");
   });
 });

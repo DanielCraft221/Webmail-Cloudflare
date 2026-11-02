@@ -49,7 +49,10 @@ function dangers(html: string): string[] {
         found.push(`${tag}[${name}]`);
       if (name === "href" && !/^(https?:|mailto:)/i.test(attr.value))
         found.push(`href=${attr.value}`);
-      if (name === "src" && !/^data:image\//i.test(attr.value))
+      if (
+        name === "src" &&
+        !/^data:image\/(?:png|jpeg|gif|webp)[;,]/i.test(attr.value)
+      )
         found.push(`src=${attr.value}`);
       if (name === "style" && /url\s*\(|\\/i.test(attr.value))
         found.push(`style=${attr.value}`);
@@ -147,6 +150,32 @@ describe("sanitizeEmailHtml: attack corpus", () => {
     expect(imgs[2]?.getAttribute("src")).toBe(
       "data:image/png;base64,iVBORw0KGgo=",
     );
+  });
+
+  it("keeps only png, jpeg, gif and webp as data: images", () => {
+    const kept = ["png", "jpeg", "gif", "webp"].map(
+      (t) => `data:image/${t};base64,AAAA`,
+    );
+    const dropped = [
+      "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+      "data:image/svg+xml,<svg onload=alert(1)>",
+      "data:image/bmp;base64,AAAA",
+      "data:image/pngx;base64,AAAA",
+      "data:image/x-icon;base64,AAAA",
+    ];
+    const out = sanitizeEmailHtml(
+      [...kept, ...dropped].map((s) => `<img src="${s}">`).join(""),
+    );
+    const imgs = Array.from(
+      new JSDOM(out.html).window.document.querySelectorAll("img"),
+    );
+    expect(imgs.map((i) => i.getAttribute("src"))).toEqual([
+      ...kept,
+      ...dropped.map(() => null),
+    ]);
+    expect(imgs[4]?.getAttribute("alt")).toBe("Imagem bloqueada");
+    // Not remote, so not in the "remote images blocked" count.
+    expect(out.blockedImages).toBe(0);
   });
 
   it("counts from zero on every call", () => {

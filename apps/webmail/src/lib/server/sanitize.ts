@@ -176,10 +176,19 @@ function createPurifier() {
     }
     if (element.nodeName === "IMG") {
       const src = element.getAttribute("src");
-      if (src !== null && !/^data:image\//i.test(src)) {
+      // Only raster images inline: no data:image/svg+xml, which is a document of its own.
+      if (
+        src !== null &&
+        !/^data:image\/(?:png|jpeg|gif|webp)[;,]/i.test(src)
+      ) {
         element.removeAttribute("src");
-        element.setAttribute("alt", "Imagem remota bloqueada");
-        blocked++;
+        // Only remote images count for the "remote images blocked" notice.
+        const remote = !/^\s*data:/i.test(src);
+        element.setAttribute(
+          "alt",
+          remote ? "Imagem remota bloqueada" : "Imagem bloqueada",
+        );
+        if (remote) blocked++;
       }
     }
   });

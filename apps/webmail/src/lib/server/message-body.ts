@@ -1,3 +1,4 @@
+import type { DatabaseSync } from "node:sqlite";
 import type { api } from "@webmail/shared";
 import type { z } from "zod";
 import type { SanitizePool } from "./sanitize-pool.ts";
@@ -44,10 +45,18 @@ const TOO_LARGE =
 const FAILED =
   "Não foi possível exibir esta mensagem formatada. Abaixo, a versão em texto; o original está no botão do .eml.";
 
+/**
+ * A message whose sanitization timed out or ran out of memory goes straight to the text version
+ * for this long: reopening it must not hold a worker for 10 s each time (only its id is kept).
+ */
+export const FAILED_FOR = 6 * 60 * 60 * 1000;
+
 /** The document served by /mensagens/[id]/corpo, inside the sandboxed iframe. */
 export async function renderBody(
+  id: string,
   body: Body,
-  sanitizer: SanitizePool,
+  { sanitizer, db }: { sanitizer: SanitizePool; db: DatabaseSync },
+  now = Date.now(),
 ): Promise<BodyResult> {
   const text = body?.text ?? "";
   if (!body?.html)
@@ -60,6 +69,10 @@ export async function renderBody(
           : "O conteúdo desta mensagem não pôde ser lido. O original está no botão do .eml.",
       ),
     };
+  const failedBefore = db
+    .prepare("SELECT 1 FROM sanitize_failed WHERE message_id = ? AND until > ?")
+    .get(id, now);
+  if (failedBefore) return { status: 200, html: textDocument(text, FAILED) };
   const result = await sanitizer.run(body.html);
   if (result.ok) {
     const html = `<!doctype html>${result.html}`;
@@ -75,6 +88,13 @@ export async function renderBody(
     };
   }
   if (result.reason === "busy") return { status: 503 };
+  // Not "unavailable": that is the webmail's fault, not the message's.
+  if (result.reason === "failed") {
+    db.prepare("DELETE FROM sanitize_failed WHERE until <= ?").run(now);
+    db.prepare(
+      "INSERT OR REPLACE INTO sanitize_failed (message_id, until) VALUES (?, ?)",
+    ).run(id, now + FAILED_FOR);
+  }
   return {
     status: 200,
     html: textDocument(

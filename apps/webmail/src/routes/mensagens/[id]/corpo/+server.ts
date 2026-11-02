@@ -10,10 +10,11 @@ import type { RequestHandler } from "./$types";
  */
 export const GET: RequestHandler = async ({ params, locals }) => {
   const user = requireUser(locals);
-  const { api, sanitizer } = ctx();
-  const message = await api.message(user.id, checkId(params.id));
+  const { api, sanitizer, db } = ctx();
+  const id = checkId(params.id);
+  const message = await api.message(user.id, id);
   if (!message) error(404, NOT_FOUND);
-  const result = await renderBody(message.body, sanitizer);
+  const result = await renderBody(id, message.body, { sanitizer, db });
   if (result.status === 503)
     error(
       503,
