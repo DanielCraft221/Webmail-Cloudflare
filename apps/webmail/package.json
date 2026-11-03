@@ -26,10 +26,10 @@
     "@sveltejs/adapter-node": "6.0.0",
     "@sveltejs/kit": "3.1.0",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
-    "@types/node": "24.19.2",
-    "svelte": "5.57.2",
+    "@types/node": "26.6.5",
+    "svelte": "5.57.3",
     "svelte-check": "4.7.7",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "vite": "8.3.5",
     "vitest": "5.0.5"
   }
